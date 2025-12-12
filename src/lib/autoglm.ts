@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { createHash } from 'crypto';
 import { 
   UserPreferences, 
   Task, 
@@ -326,8 +327,8 @@ export class AutoGLM {
     };
 
     const contextString = JSON.stringify(hashableContext);
-    // Simple hash (for demo purposes, real world needs better hash)
-    const contextHash = Buffer.from(contextString).toString('base64').substring(0, 32); 
+    // Use MD5 to hash the entire context string to ensure all data is considered.
+    const contextHash = createHash('md5').update(contextString).digest('hex');
 
     const { data: existingSession } = await supabase
       .from('ai_sessions')

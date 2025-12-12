@@ -1,5 +1,5 @@
-
 import { NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 
 export async function GET() {
   const generateHash = (timestamp: string, data: any) => {
@@ -12,7 +12,8 @@ export async function GET() {
     };
 
     const contextString = JSON.stringify(hashableContext);
-    return Buffer.from(contextString).toString('base64').substring(0, 32);
+    // Use MD5 hash instead of truncated base64
+    return createHash('md5').update(contextString).digest('hex');
   };
 
   const data = { task: 'test' };
@@ -36,7 +37,7 @@ export async function GET() {
     },
     differentBucket: {
       t1, t3,
-      match: h1 === h3,
+      match: h1 === h3, // Should be false now
       h1, h3
     },
     success: h1 === h2 && h1 !== h3

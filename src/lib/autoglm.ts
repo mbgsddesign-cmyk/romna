@@ -10,6 +10,7 @@ import {
   UserActivity, 
   AISession 
 } from '@/lib/database.types';
+import { NotificationDispatcher } from '@/lib/notification-dispatcher';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -274,7 +275,7 @@ export class AutoGLM {
         .eq('type', 'ai')
         .gte('created_at', today.toISOString());
 
-      if (count && count >= 1) {
+      if (count && count >= 2) { // Updated to 2 per day
         console.log(`[AutoGLM] Free tier limit reached for user ${userId}.`);
         // We might still generate insights but NOT notifications? 
         // Prompt says "Free: max 1 AI notification / day".
@@ -360,33 +361,20 @@ export class AutoGLM {
 
       // 7.2 Notification
       if (result.notification) {
-        // Enforce Rate Limit Check AGAIN
-        let allowNotification = true;
-        if (userPrefs.plan_tier === 'free') {
-           const { count } = await supabase
-            .from('notifications')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', userId)
-            .eq('type', 'ai')
-            .gte('created_at', startOfDay);
-           
-           if (count && count >= 1) allowNotification = false;
-        }
-
-        if (allowNotification) {
-          await supabase.from('notifications').insert({
-            user_id: userId,
-            type: 'ai',
+        const dispatcher = new NotificationDispatcher(supabase);
+        
+        await dispatcher.dispatch(
+          userId,
+          {
             title: result.notification.title,
-            message: result.notification.body,
-            category: 'ai',
-            priority: result.notification.priority === 1 ? 'high' : 'normal', // Map priority
+            body: result.notification.body,
+            priority: result.notification.priority === 1 ? 'high' : 'normal',
             ai_reason: result.notification.ai_reason,
-            is_read: false,
-            is_batched: false,
+            category: 'ai',
             metadata: { trigger }
-          });
-        }
+          },
+          userPrefs
+        );
       }
 
       // 7.3 Log Activity

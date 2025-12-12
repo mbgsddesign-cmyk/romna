@@ -197,6 +197,7 @@ export default function VoicePage() {
             transcript,
             confidence: detectedIntent.confidence,
             data: detectedIntent.data,
+            userId: user?.id,
           }
         })
       });

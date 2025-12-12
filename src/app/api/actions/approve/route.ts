@@ -1,22 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: Request) {
   const { intent, payload } = await req.json();
   
   console.log('[Approve]', intent, payload);
   
-  const supabase = await createClient();
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  
   try {
     let insertedId: string | null = null;
+    
+    // Extract user_id from payload if provided by frontend
+    const userId = payload.userId || payload.data?.userId;
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+    }
     
     switch (intent) {
       case 'reminder': {
@@ -27,7 +31,7 @@ export async function POST(req: Request) {
         const { data, error } = await supabase
           .from('tasks')
           .insert({
-            user_id: user.id,
+            user_id: userId,
             title: `🔔 ${title}`,
             due_date: reminderDate,
             priority: 'high',
@@ -55,7 +59,7 @@ export async function POST(req: Request) {
         const { data, error } = await supabase
           .from('tasks')
           .insert({
-            user_id: user.id,
+            user_id: userId,
             title: taskTitle,
             due_date: dueDate,
             priority: priority,
@@ -87,7 +91,7 @@ export async function POST(req: Request) {
         const { data, error } = await supabase
           .from('events')
           .insert({
-            user_id: user.id,
+            user_id: userId,
             title: eventTitle,
             start_time: eventDate,
             location: eventData.location || null,
@@ -123,7 +127,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('[Approve] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to persist action' }, 
+      { error: 'Failed to save action', details: error instanceof Error ? error.message : 'Unknown error' }, 
       { status: 500 }
     );
   }

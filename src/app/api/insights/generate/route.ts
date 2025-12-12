@@ -1,27 +1,21 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { AIInsightsService } from '@/services/ai-insights.service';
+import { AutoGLM } from '@/lib/autoglm';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    
     const { userId } = await req.json();
     
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID required' }, { status: 400 });
     }
 
-    const insight = await AIInsightsService.generateDailyInsight(userId);
+    const result = await AutoGLM.run(userId, 'new_insight');
     
-    if (!insight) {
-      return NextResponse.json({ success: false, error: 'Failed to generate insight' }, { status: 500 });
+    if (!result.success) {
+      return NextResponse.json({ success: false, error: result.error || result.reason }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, insight });
+    return NextResponse.json({ success: true, result });
   } catch (error: any) {
     console.error('Generate insight error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

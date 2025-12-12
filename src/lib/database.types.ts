@@ -114,6 +114,7 @@ export interface Notification {
   message: string;
   category: NotificationCategory;
   priority: NotificationPriority;
+  ai_reason?: string | null;
   is_read: boolean;
   is_batched: boolean;
   action_url: string | null;
@@ -130,6 +131,7 @@ export interface Insight {
   title: string;
   description: string;
   insight_data: Record<string, unknown>;
+  source?: string;
   period_start: string;
   period_end: string;
   created_at: string;
@@ -157,4 +159,73 @@ export interface ProfileWithSubscription extends Profile {
   usageTracking?: UsageTracking;
   planLimits?: PlanLimits;
   integrations?: UserIntegration[];
+}
+
+export interface UserPreferences {
+  id: string;
+  user_id: string;
+  timezone: string;
+  locale: string;
+  theme: string;
+  notifications_enabled: boolean;
+  week_start: string;
+  ai_opt_in: boolean;
+  plan_tier: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoiceNote {
+  id: string;
+  user_id: string;
+  audio_url: string | null;
+  transcription: string | null;
+  processed: boolean;
+  confidence: number | null;
+  intent: string | null;
+  created_at: string;
+  meta: Record<string, unknown>;
+}
+
+export interface UserActivity {
+  id: string;
+  user_id: string;
+  action: string;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AISession {
+  id: string;
+  user_id: string;
+  context_hash: string | null;
+  model: string | null;
+  created_at: string;
+  meta: Record<string, unknown>;
+}
+
+export interface Task {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Event {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  start_time: string;
+  end_time: string;
+  location: string | null;
+  is_all_day: boolean;
+  created_at: string;
+  updated_at: string;
 }

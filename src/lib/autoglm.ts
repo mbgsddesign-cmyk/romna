@@ -308,7 +308,16 @@ export class AutoGLM {
     };
 
     // 5. Check Duplication (Context Hash)
-    const contextString = JSON.stringify(dataContext);
+    // FIX: Remove volatile timestamps. Use stable hourly bucket for deduplication.
+    // This ensures identical data states generate the same hash within the same hour.
+    const timeBucket = new Date().toISOString().slice(0, 13); // e.g. "2025-12-12T10"
+    
+    const hashableContext = {
+      ...dataContext,
+      current_time: timeBucket
+    };
+
+    const contextString = JSON.stringify(hashableContext);
     // Simple hash (for demo purposes, real world needs better hash)
     const contextHash = Buffer.from(contextString).toString('base64').substring(0, 32); 
 

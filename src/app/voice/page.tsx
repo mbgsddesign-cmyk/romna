@@ -78,8 +78,8 @@ export default function VoicePage() {
 
       if (!transcribeRes.ok) {
         const errorData = await transcribeRes.json();
-        if (errorData.error === 'OpenAI API key not configured') {
-          toast.error(locale === 'ar' ? 'مفتاح OpenAI غير مضبوط - استخدم الوضع التجريبي' : 'OpenAI API key not configured - using demo mode');
+        if (errorData.error === 'DashScope API key not configured') {
+          toast.error(locale === 'ar' ? 'مفتاح DashScope غير مضبوط - استخدم الوضع التجريبي' : 'DashScope API key not configured - using demo mode');
           setTranscript('Demo: Add a meeting with Ahmed tomorrow at 3pm');
           setDetectedIntent({
             type: 'event',
@@ -88,10 +88,23 @@ export default function VoicePage() {
           });
           return;
         }
+        
+        // Show provider in error message for debugging
+        const provider = errorData.provider || 'Speech recognition';
+        toast.error(locale === 'ar' 
+          ? `فشل التعرف على الصوت: ${errorData.error}` 
+          : `${provider} failed: ${errorData.error}`
+        );
         throw new Error('Transcription failed');
       }
       
       const { transcript: text } = await transcribeRes.json();
+      
+      if (!text || text.trim() === '') {
+        toast.warning(locale === 'ar' ? 'لم يتم اكتشاف كلام - حاول مرة أخرى' : 'No speech detected - try again');
+        return;
+      }
+      
       setTranscript(text);
 
       const classifyRes = await fetch('/api/voice/classify', {
@@ -114,13 +127,18 @@ export default function VoicePage() {
       }
     } catch (err) {
       console.error('Processing error:', err);
-      toast.error(locale === 'ar' ? 'فشلت المعالجة - حاول مرة أخرى' : 'Processing failed. Try again.');
-      setTranscript(locale === 'ar' ? 'تجريبي: ذكرني بالاجتماع غداً الساعة 10 صباحاً' : 'Demo: Remind me about the meeting tomorrow at 10am');
-      setDetectedIntent({
-        type: 'reminder',
-        confidence: 0.88,
-        data: { title: locale === 'ar' ? 'الاجتماع' : 'meeting', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '10am' },
-      });
+      if (err instanceof Error && err.message !== 'Transcription failed') {
+        toast.error(locale === 'ar' ? 'فشلت المعالجة - حاول مرة أخرى' : 'Processing failed. Try again.');
+      }
+      // Only show demo fallback if error is not already handled
+      if (!transcript) {
+        setTranscript(locale === 'ar' ? 'تجريبي: ذكرني بالاجتماع غداً الساعة 10 صباحاً' : 'Demo: Remind me about the meeting tomorrow at 10am');
+        setDetectedIntent({
+          type: 'reminder',
+          confidence: 0.88,
+          data: { title: locale === 'ar' ? 'الاجتماع' : 'meeting', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '10am' },
+        });
+      }
     } finally {
       setIsProcessing(false);
     }

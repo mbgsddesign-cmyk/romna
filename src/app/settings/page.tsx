@@ -58,8 +58,6 @@ export default function SettingsPage() {
 
   const handleLanguageChange = (value: Locale) => {
     setLocale(value);
-    document.documentElement.dir = value === 'ar' ? 'rtl' : 'ltr';
-    document.documentElement.lang = value;
     toast.success(value === 'ar' ? 'تم تغيير اللغة' : 'Language changed');
   };
 
@@ -78,7 +76,7 @@ export default function SettingsPage() {
       });
       setNewEmail({ email: '', displayName: '' });
       setIsAddEmailOpen(false);
-      toast.success(t('addAccount') + ' - Success');
+      toast.success(t('addAccount') + ' - ' + t('success'));
     }
   };
 
@@ -132,7 +130,7 @@ export default function SettingsPage() {
         </motion.header>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Account</h2>
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('account')}</h2>
           <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
             <div className="p-5 flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -165,7 +163,7 @@ export default function SettingsPage() {
             {profile?.usageTracking && profile?.planLimits && (
               <div className="p-5 space-y-3">
                 <div className="flex items-center justify-between text-[13px]">
-                  <span className="text-muted-foreground">AI Tokens</span>
+                  <span className="text-muted-foreground">{t('aiTokens')}</span>
                   <span className="font-semibold text-foreground">
                     {profile.usageTracking.ai_tokens_used.toLocaleString()} / {profile.planLimits.monthly_ai_tokens === -1 ? '∞' : profile.planLimits.monthly_ai_tokens.toLocaleString()}
                   </span>
@@ -176,7 +174,7 @@ export default function SettingsPage() {
                 />
                 {profile.subscription?.current_period_end && (
                   <p className="text-[12px] text-accent">
-                    Resets: {new Date(profile.subscription.current_period_end).toLocaleDateString()}
+                    {t('resets')}: {new Date(profile.subscription.current_period_end).toLocaleDateString()}
                   </p>
                 )}
               </div>
@@ -214,15 +212,15 @@ export default function SettingsPage() {
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Subscription</h2>
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('subscriptions')}</h2>
           <Link href="/settings/billing">
             <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
                 icon={CreditCard}
                 iconBg="bg-accent/20"
                 iconColor="text-accent"
-                title="Billing & Plans"
-                description={`Current: ${(profile?.subscription?.plan || 'free').charAt(0).toUpperCase() + (profile?.subscription?.plan || 'free').slice(1)} Plan`}
+                title={t('billingPlans')}
+                description={`${t('current')}: ${(profile?.subscription?.plan || 'free').charAt(0).toUpperCase() + (profile?.subscription?.plan || 'free').slice(1)} ${t('plan')}`}
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
             </div>
@@ -230,7 +228,7 @@ export default function SettingsPage() {
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Preferences</h2>
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('preferences')}</h2>
           <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
             <SettingRow
               icon={Globe}
@@ -288,7 +286,7 @@ export default function SettingsPage() {
 
           {gmailAccounts.length > 0 && (
             <div className="space-y-2 mb-4">
-              <p className="text-xs text-muted-foreground mb-2">Connected Gmail Accounts</p>
+              <p className="text-xs text-muted-foreground mb-2">{t('connectedGmailAccounts')}</p>
               {gmailAccounts.map((account) => (
                 <Card key={account.id} className="p-3 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
@@ -296,9 +294,9 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium">{(account.metadata as { email?: string })?.email || 'Gmail Account'}</p>
-                    <p className="text-xs text-muted-foreground">Connected via OAuth</p>
+                    <p className="text-xs text-muted-foreground">{t('connectedViaOAuth')}</p>
                   </div>
-                  <Badge variant="outline" className="text-xs text-green-600">Connected</Badge>
+                  <Badge variant="outline" className="text-xs text-green-600">{t('connected')}</Badge>
                 </Card>
               ))}
             </div>
@@ -339,7 +337,7 @@ export default function SettingsPage() {
                           onClick={() => setPrimaryEmail(account.id)}
                           className="text-xs h-8 text-accent"
                         >
-                          Set Primary
+                          {t('setPrimary')}
                         </Button>
                       )}
                       <Button
@@ -356,20 +354,20 @@ export default function SettingsPage() {
               ))}
             </div>
           ) : gmailAccounts.length === 0 ? (
-            <EmptyState message="No email accounts connected" icon={Mail} />
+            <EmptyState message={t('noEmailAccounts')} icon={Mail} />
           ) : null}
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">About</h2>
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('aboutRomna')}</h2>
           <a href="https://romnaai.netlify.app/" target="_blank" rel="noopener noreferrer">
             <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
                 icon={Info}
                 iconBg="bg-muted"
                 iconColor="text-muted-foreground"
-                title="About ROMNA"
-                description="Version 1.0.0 • romnaai.netlify.app"
+                title={t('aboutRomna')}
+                description={t('versionInfo')}
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
             </div>
@@ -417,7 +415,7 @@ export default function SettingsPage() {
       <Sheet open={isSubscriptionOpen} onOpenChange={setIsSubscriptionOpen}>
         <SheetContent side="bottom" className="rounded-t-[22px] pb-8 max-h-[80vh] overflow-y-auto">
           <SheetHeader className="pb-4">
-            <SheetTitle className="text-xl font-semibold">Manage Subscription</SheetTitle>
+            <SheetTitle className="text-xl font-semibold">{t('manageSubscription')}</SheetTitle>
           </SheetHeader>
           
           <div className="space-y-4">
@@ -428,17 +426,17 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Zap className="w-5 h-5 text-muted-foreground" />
-                  <h3 className="font-semibold">Free</h3>
+                  <h3 className="font-semibold">{t('free')}</h3>
                 </div>
                 {profile?.subscription?.plan === 'free' && (
-                  <Badge className="bg-primary/10 text-primary">Current</Badge>
+                  <Badge className="bg-primary/10 text-primary">{t('current')}</Badge>
                 )}
               </div>
-              <p className="text-2xl font-bold">$0<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-2xl font-bold">$0<span className="text-sm font-normal text-muted-foreground">{t('perMonth')}</span></p>
               <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                <li>• 10,000 AI tokens/month</li>
+                <li>• 10,000 {t('tokens')}</li>
                 <li>• 30 voice minutes/month</li>
-                <li>• 2 integrations</li>
+                <li>• 2 {t('integrations')}</li>
               </ul>
             </Card>
 
@@ -449,22 +447,22 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-accent" />
-                  <h3 className="font-semibold">Pro</h3>
+                  <h3 className="font-semibold">{t('pro')}</h3>
                 </div>
                 {profile?.subscription?.plan === 'pro' && (
-                  <Badge className="bg-accent/10 text-accent">Current</Badge>
+                  <Badge className="bg-accent/10 text-accent">{t('current')}</Badge>
                 )}
               </div>
-              <p className="text-2xl font-bold">$19<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-2xl font-bold">$19<span className="text-sm font-normal text-muted-foreground">{t('perMonth')}</span></p>
               <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                <li>• 100,000 AI tokens/month</li>
+                <li>• 100,000 {t('tokens')}</li>
                 <li>• 300 voice minutes/month</li>
-                <li>• 5 integrations</li>
+                <li>• 5 {t('integrations')}</li>
                 <li>• AI Memory & Auto Actions</li>
               </ul>
               {profile?.subscription?.plan !== 'pro' && (
                 <Button className="w-full mt-4" variant="default">
-                  Upgrade to Pro
+                  {t('upgradeToPro')}
                 </Button>
               )}
             </Card>
@@ -476,35 +474,35 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Crown className="w-5 h-5 text-purple-500" />
-                  <h3 className="font-semibold">Enterprise</h3>
+                  <h3 className="font-semibold">{t('enterprise')}</h3>
                 </div>
                 {profile?.subscription?.plan === 'enterprise' && (
-                  <Badge className="bg-purple-500/10 text-purple-500">Current</Badge>
+                  <Badge className="bg-purple-500/10 text-purple-500">{t('current')}</Badge>
                 )}
               </div>
-              <p className="text-2xl font-bold">$99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-2xl font-bold">$99<span className="text-sm font-normal text-muted-foreground">{t('perMonth')}</span></p>
               <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                <li>• Unlimited AI tokens</li>
+                <li>• Unlimited {t('tokens')}</li>
                 <li>• Unlimited voice minutes</li>
-                <li>• Unlimited integrations</li>
+                <li>• Unlimited {t('integrations')}</li>
                 <li>• Priority support</li>
               </ul>
               {profile?.subscription?.plan !== 'enterprise' && (
                 <Button className="w-full mt-4" variant="outline">
-                  Contact Sales
+                  {t('contactSales')}
                 </Button>
               )}
             </Card>
 
             {profile?.subscription && (
               <div className="pt-4 border-t">
-                <h4 className="font-medium mb-2">Current Billing Cycle</h4>
+                <h4 className="font-medium mb-2">{t('currentBillingCycle')}</h4>
                 <div className="text-sm text-muted-foreground space-y-1">
                   {profile.subscription.current_period_start && (
-                    <p>Started: {new Date(profile.subscription.current_period_start).toLocaleDateString()}</p>
+                    <p>{t('started')}: {new Date(profile.subscription.current_period_start).toLocaleDateString()}</p>
                   )}
                   {profile.subscription.current_period_end && (
-                    <p>Renews: {new Date(profile.subscription.current_period_end).toLocaleDateString()}</p>
+                    <p>{t('renews')}: {new Date(profile.subscription.current_period_end).toLocaleDateString()}</p>
                   )}
                 </div>
               </div>

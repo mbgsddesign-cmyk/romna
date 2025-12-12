@@ -65,7 +65,7 @@ export default function LoginPage() {
       },
     });
     if (error) {
-      toast.error(locale === 'ar' ? 'فشل تسجيل الدخول بجوجل' : 'Google login failed');
+      toast.error(t('googleLoginFailed'));
       setOauthLoading(false);
     }
   };
@@ -98,34 +98,26 @@ export default function LoginPage() {
     {
       icon: Mic,
       color: 'from-primary to-accent',
-      titleEn: 'Tap microphone',
-      titleAr: 'اضغط على الميكروفون',
-      descEn: 'Start recording your voice command',
-      descAr: 'ابدأ بتسجيل أمرك الصوتي',
+      title: t('tutorialStep1Title'),
+      desc: t('tutorialStep1Desc'),
     },
     {
       icon: Sparkles,
       color: 'from-accent to-teal',
-      titleEn: 'Speak naturally',
-      titleAr: 'تحدث بشكل طبيعي',
-      descEn: '"Schedule meeting tomorrow"',
-      descAr: '"جدول اجتماع غداً"',
+      title: t('tutorialStep2Title'),
+      desc: t('tutorialStep2Desc'),
     },
     {
       icon: CheckSquare,
       color: 'from-teal to-success',
-      titleEn: 'ROMNA creates it',
-      titleAr: 'رومنا ينشئ تلقائياً',
-      descEn: 'Tasks created automatically',
-      descAr: 'المهام تنشأ تلقائياً',
+      title: t('tutorialStep3Title'),
+      desc: t('tutorialStep3Desc'),
     },
     {
       icon: CalendarDays,
       color: 'from-success to-primary',
-      titleEn: 'Review anytime',
-      titleAr: 'راجع في أي وقت',
-      descEn: 'Find in Tasks or Calendar',
-      descAr: 'اعثر عليه في المهام',
+      title: t('tutorialStep4Title'),
+      desc: t('tutorialStep4Desc'),
     },
   ];
 
@@ -150,7 +142,7 @@ export default function LoginPage() {
               {t('appName')}
             </h1>
             <p className="text-[15px] font-medium bg-gradient-to-r from-accent to-teal bg-clip-text text-transparent mt-1">
-              {locale === 'ar' ? 'مساعدك الذكي للإنتاجية' : 'Your AI Productivity Assistant'}
+              {t('tagline')}
             </p>
           </motion.div>
 
@@ -163,9 +155,7 @@ export default function LoginPage() {
             <div className="text-center">
               <h2 className="text-[22px] font-bold">{t('login')}</h2>
               <p className="text-[13px] text-muted-foreground mt-1">
-                {locale === 'ar' 
-                  ? 'سجل الدخول لمتابعة تجربة مساعدك الشخصي' 
-                  : 'Sign in to continue your AI assistant experience'}
+                {t('loginSubtitle')}
               </p>
             </div>
 
@@ -213,7 +203,7 @@ export default function LoginPage() {
               </div>
               <div className="relative flex justify-center text-[12px] uppercase">
                 <span className="bg-card px-3 text-muted-foreground font-medium">
-                  {locale === 'ar' ? 'أو' : 'or'}
+                  {t('or')}
                 </span>
               </div>
             </div>
@@ -235,7 +225,7 @@ export default function LoginPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
               )}
-              <span>{locale === 'ar' ? 'المتابعة بحساب جوجل' : 'Continue with Google'}</span>
+              <span>{t('continueWithGoogle')}</span>
             </Button>
 
             <p className="text-center text-[14px] text-muted-foreground">
@@ -257,7 +247,7 @@ export default function LoginPage() {
               className="w-full flex items-center justify-center gap-2 py-3 text-[14px] text-muted-foreground hover:text-foreground transition-colors"
             >
               <span className="font-medium">
-                {locale === 'ar' ? 'كيف تستخدم رومنا؟' : 'How to use ROMNA'}
+                {t('howToUse')}
               </span>
               {showTutorial ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
@@ -285,10 +275,10 @@ export default function LoginPage() {
                             <step.icon className="w-5 h-5 text-white" />
                           </div>
                           <p className="text-[12px] font-semibold">
-                            {locale === 'ar' ? step.titleAr : step.titleEn}
+                            {step.title}
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
-                            {locale === 'ar' ? step.descAr : step.descEn}
+                            {step.desc}
                           </p>
                         </motion.div>
                       ))}
@@ -303,9 +293,7 @@ export default function LoginPage() {
 
       <div className="pb-6 pt-2 px-5 text-center safe-area-bottom">
         <p className="text-[11px] text-muted-foreground">
-          {locale === 'ar' 
-            ? 'بالمتابعة، أنت توافق على شروط رومنا وسياسة الخصوصية.'
-            : "By continuing, you agree to ROMNA's Terms & Privacy Policy."}
+          {t('termsLogin')}
         </p>
       </div>
 
@@ -341,26 +329,22 @@ export default function LoginPage() {
                     <CheckCircle className="w-8 h-8 text-accent" />
                   </div>
                   <h4 className="text-[18px] font-semibold mb-2">
-                    {locale === 'ar' ? 'تم الإرسال!' : 'Email Sent!'}
+                    {t('emailSent')}
                   </h4>
                   <p className="text-[14px] text-muted-foreground mb-4">
-                    {locale === 'ar' 
-                      ? 'تحقق من بريدك الإلكتروني لرابط إعادة التعيين'
-                      : 'Check your email for the reset link'}
+                    {t('checkEmail')}
                   </p>
                   <p className="text-[12px] text-muted-foreground bg-muted/50 rounded-[12px] p-2">
                     {forgotEmail}
                   </p>
                   <Button onClick={closeForgotModal} className="mt-4 w-full rounded-[14px]">
-                    {locale === 'ar' ? 'حسناً' : 'Got it'}
+                    {t('gotIt')}
                   </Button>
                 </div>
               ) : (
                 <form onSubmit={handleForgotPassword} className="space-y-4">
                   <p className="text-[14px] text-muted-foreground">
-                    {locale === 'ar'
-                      ? 'أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة تعيين كلمة المرور'
-                      : 'Enter your email and we\'ll send you a password reset link'}
+                    {t('forgotPasswordDesc')}
                   </p>
                   <RomnaInput
                     icon={Mail}

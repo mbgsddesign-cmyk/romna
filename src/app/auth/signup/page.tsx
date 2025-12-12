@@ -48,30 +48,6 @@ export default function SignupPage() {
     return 'weak';
   }, [password]);
 
-  const strengthConfig = {
-    weak: {
-      color: 'bg-destructive',
-      textColor: 'text-destructive',
-      percent: 33,
-      labelEn: 'Weak',
-      labelAr: 'ضعيفة',
-    },
-    medium: {
-      color: 'bg-warning',
-      textColor: 'text-warning',
-      percent: 66,
-      labelEn: 'Medium',
-      labelAr: 'متوسطة',
-    },
-    strong: {
-      color: 'bg-success',
-      textColor: 'text-success',
-      percent: 100,
-      labelEn: 'Strong',
-      labelAr: 'قوية',
-    },
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -99,7 +75,7 @@ export default function SignupPage() {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success(locale === 'ar' ? 'تم إنشاء الحساب!' : 'Account created!');
+      toast.success(t('accountCreated'));
       router.push('/onboarding');
     }
   };
@@ -113,13 +89,34 @@ export default function SignupPage() {
       },
     });
     if (error) {
-      toast.error(locale === 'ar' ? 'فشل التسجيل بجوجل' : 'Google signup failed');
+      toast.error(t('googleSignupFailed'));
       setOauthLoading(false);
     }
   };
 
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
   const passwordsDontMatch = confirmPassword.length > 0 && password !== confirmPassword;
+
+  const strengthConfig = {
+    weak: {
+      color: 'bg-destructive',
+      textColor: 'text-destructive',
+      percent: 33,
+      label: t('weak'),
+    },
+    medium: {
+      color: 'bg-warning',
+      textColor: 'text-warning',
+      percent: 66,
+      label: t('mediumStrength'),
+    },
+    strong: {
+      color: 'bg-success',
+      textColor: 'text-success',
+      percent: 100,
+      label: t('strong'),
+    },
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5 overflow-x-hidden">
@@ -142,7 +139,7 @@ export default function SignupPage() {
               {t('appName')}
             </h1>
             <p className="text-[15px] font-medium bg-gradient-to-r from-accent to-teal bg-clip-text text-transparent mt-1">
-              {locale === 'ar' ? 'مساعدك الذكي للإنتاجية' : 'Your AI Productivity Assistant'}
+              {t('tagline')}
             </p>
           </motion.div>
 
@@ -155,9 +152,7 @@ export default function SignupPage() {
             <div className="text-center">
               <h2 className="text-[22px] font-bold">{t('signup')}</h2>
               <p className="text-[13px] text-muted-foreground mt-1">
-                {locale === 'ar' 
-                  ? 'أنشئ حسابك للبدء مع مساعدك الذكي' 
-                  : 'Create your account to get started'}
+                {t('signupSubtitle')}
               </p>
             </div>
 
@@ -181,9 +176,7 @@ export default function SignupPage() {
                   autoComplete="email"
                 />
                 <p className="text-[11px] text-muted-foreground px-1">
-                  {locale === 'ar' 
-                    ? 'سنستخدم بريدك لتأمين حسابك ومزامنة بياناتك'
-                    : "We'll use your email to secure your account"}
+                  {t('emailSecurityNote')}
                 </p>
               </div>
 
@@ -212,7 +205,7 @@ export default function SignupPage() {
                       />
                     </div>
                     <span className={cn("text-[12px] font-semibold min-w-[60px]", strengthConfig[passwordStrength].textColor)}>
-                      {locale === 'ar' ? strengthConfig[passwordStrength].labelAr : strengthConfig[passwordStrength].labelEn}
+                      {strengthConfig[passwordStrength].label}
                     </span>
                   </motion.div>
                 )}
@@ -226,7 +219,7 @@ export default function SignupPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   showPasswordToggle={!passwordsMatch && !passwordsDontMatch}
                   success={passwordsMatch}
-                  error={passwordsDontMatch ? (locale === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match') : undefined}
+                  error={passwordsDontMatch ? t('passwordsDoNotMatch') : undefined}
                   autoComplete="new-password"
                 />
                 {passwordsMatch && (
@@ -255,7 +248,7 @@ export default function SignupPage() {
               </div>
               <div className="relative flex justify-center text-[12px] uppercase">
                 <span className="bg-card px-3 text-muted-foreground font-medium">
-                  {locale === 'ar' ? 'أو' : 'or'}
+                  {t('or')}
                 </span>
               </div>
             </div>
@@ -277,7 +270,7 @@ export default function SignupPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
               )}
-              <span>{locale === 'ar' ? 'التسجيل بحساب جوجل' : 'Sign up with Google'}</span>
+              <span>{t('signupWithGoogle')}</span>
             </Button>
 
             <p className="text-center text-[14px] text-muted-foreground">
@@ -292,9 +285,7 @@ export default function SignupPage() {
 
       <div className="pb-6 pt-2 px-5 text-center safe-area-bottom">
         <p className="text-[11px] text-muted-foreground">
-          {locale === 'ar' 
-            ? 'بالتسجيل، أنت توافق على شروط رومنا وسياسة الخصوصية.'
-            : "By signing up, you agree to ROMNA's Terms & Privacy Policy."}
+          {t('termsSignup')}
         </p>
       </div>
     </div>

@@ -187,20 +187,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <button 
-              onClick={() => setIsSubscriptionOpen(true)}
-              className="w-full"
-            >
-              <SettingRow
-                icon={CreditCard}
-                iconBg="bg-accent/10"
-                iconColor="text-accent"
-                title="Manage Subscription"
-                description={`Current: ${(profile?.subscription?.plan || 'free').charAt(0).toUpperCase() + (profile?.subscription?.plan || 'free').slice(1)} Plan`}
-                action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
-              />
-            </button>
-
             {isAdmin && (
               <Link href="/admin">
                 <SettingRow
@@ -226,6 +212,22 @@ export default function SettingsPage() {
                 iconColor="text-accent"
                 title={t('integrations')}
                 description={connectedCount > 0 ? `${connectedCount} ${t('servicesConnected')}` : t('connectServices')}
+                action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
+              />
+            </Card>
+          </Link>
+        </motion.section>
+
+        <motion.section variants={itemVariants} className="mb-6">
+          <SectionHeader title="Subscription" />
+          <Link href="/settings/billing">
+            <Card className="p-0 overflow-hidden">
+              <SettingRow
+                icon={CreditCard}
+                iconBg="bg-accent/10"
+                iconColor="text-accent"
+                title="Billing & Plans"
+                description={`Current: ${(profile?.subscription?.plan || 'free').charAt(0).toUpperCase() + (profile?.subscription?.plan || 'free').slice(1)} Plan`}
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
             </Card>

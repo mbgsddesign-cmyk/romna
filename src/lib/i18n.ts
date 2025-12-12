@@ -253,6 +253,10 @@ export const translations = {
     tutorialStep3Desc: 'Tasks created automatically',
     tutorialStep4Title: 'Review anytime',
     tutorialStep4Desc: 'Find in Tasks or Calendar',
+    newPassword: 'New Password',
+    enterNewPassword: 'Enter your new password',
+    passwordResetSuccess: 'Password Reset Successfully!',
+    redirectingToLogin: 'Redirecting to login...',
   },
   ar: {
     appName: 'رومنا',
@@ -506,6 +510,10 @@ export const translations = {
     tutorialStep3Desc: 'المهام تنشأ تلقائياً',
     tutorialStep4Title: 'راجع في أي وقت',
     tutorialStep4Desc: 'اعثر عليه في المهام',
+    newPassword: 'كلمة المرور الجديدة',
+    enterNewPassword: 'أدخل كلمة المرور الجديدة',
+    passwordResetSuccess: 'تم تعيين كلمة المرور بنجاح!',
+    redirectingToLogin: 'جاري التوجيه إلى تسجيل الدخول...',
   },
 } as const;
 

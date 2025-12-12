@@ -17,8 +17,8 @@ import {
   Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useEffect, useState, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface ProductivityMetric {
@@ -76,23 +76,60 @@ export default function InsightsPage() {
   const { t, locale } = useTranslation();
   const [insights, setInsights] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.warn('Insights loading timeout - showing UI anyway');
+        setLoading(false);
+      }
+    }, 8000);
+
     fetchInsights();
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, []);
 
   const fetchInsights = async () => {
     try {
-      const res = await fetch('/api/insights/today');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const res = await fetch('/api/insights/today', {
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        console.warn('Insights API returned non-OK status');
+        setInsights([]);
+        return;
+      }
+      
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.insights) {
         setInsights(data.insights);
+      } else {
+        setInsights([]);
       }
     } catch (error) {
-      console.error('Failed to fetch insights:', error);
+      if (error.name === 'AbortError') {
+        console.warn('Insights request timed out');
+      } else {
+        console.error('Failed to fetch insights:', error);
+      }
+      setInsights([]);
     } finally {
       setLoading(false);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
     }
   };
 

@@ -1,48 +1,37 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateDailyInsight } from '@/services/ai-insights.service';
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { AIInsightsService } from '@/services/ai-insights.service';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET || 'dev-secret';
     
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: users, error } = await supabaseAdmin
+    const { data: users } = await supabase
       .from('profiles')
       .select('id')
-      .limit(100);
+      .eq('status', 'active');
 
-    if (error) throw error;
-
-    const results = [];
-    for (const user of users || []) {
-      try {
-        const insight = await generateDailyInsight(user.id);
-        results.push({ userId: user.id, success: true, insight });
-      } catch (err: any) {
-        results.push({ userId: user.id, success: false, error: err.message });
-      }
+    if (!users || users.length === 0) {
+      return NextResponse.json({ success: true, message: 'No active users' });
     }
 
+    const results = await Promise.allSettled(
+      users.map(user => AIInsightsService.generateDailyInsight(user.id))
+    );
+
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+    
     return NextResponse.json({ 
       success: true, 
-      processed: results.length,
-      results 
+      processed: users.length,
+      successful: successCount 
     });
   } catch (error: any) {
     console.error('Cron job error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Cron job failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,25 +1,29 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateDailyInsight } from '@/services/ai-insights.service';
+import { AIInsightsService } from '@/services/ai-insights.service';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId } = await req.json();
+    
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'User ID required' }, { status: 400 });
     }
 
-    const insight = await generateDailyInsight(user.id);
+    const insight = await AIInsightsService.generateDailyInsight(userId);
     
+    if (!insight) {
+      return NextResponse.json({ success: false, error: 'Failed to generate insight' }, { status: 500 });
+    }
+
     return NextResponse.json({ success: true, insight });
   } catch (error: any) {
     console.error('Generate insight error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to generate insight' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Bell, Sparkles, Calendar, Clock, CheckCircle2, X, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type NotificationType = 'all' | 'insights' | 'ai' | 'reminders';
@@ -34,9 +34,16 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<NotificationType>('all');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.warn('Notifications loading timeout - showing UI anyway');
+        setLoading(false);
+      }
+    }, 8000);
+
     fetchNotifications();
     
     const channel = supabase
@@ -56,40 +63,76 @@ export default function NotificationsPage() {
 
     return () => {
       supabase.removeChannel(channel);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
     };
   }, [activeTab]);
 
   const fetchNotifications = async () => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const category = activeTab === 'all' ? null : activeTab;
       const url = category 
         ? `/api/notifications/all?category=${category}`
         : '/api/notifications/all';
       
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        console.warn('Notifications API returned non-OK status');
+        setNotifications([]);
+        return;
+      }
+      
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.notifications) {
         setNotifications(data.notifications);
+      } else {
+        setNotifications([]);
       }
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      if (error.name === 'AbortError') {
+        console.warn('Notifications request timed out');
+      } else {
+        console.error('Failed to fetch notifications:', error);
+      }
+      setNotifications([]);
     } finally {
       setLoading(false);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
     }
   };
 
   const handleMarkRead = async (id: string) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
       await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId: id })
+        body: JSON.stringify({ notificationId: id }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
+      
       setNotifications(prev => 
         prev.map(n => n.id === id ? { ...n, is_read: true } : n)
       );
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to mark notification as read:', error);
+      }
     }
   };
 

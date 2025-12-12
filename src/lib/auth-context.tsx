@@ -33,7 +33,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const MAX_LOADING_TIME = 5000;
+const MAX_LOADING_TIME = 8000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -50,13 +50,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const repairUserData = useCallback(async (accessToken: string): Promise<ProfileWithSubscription | null> => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
       const response = await fetch('/api/auth/repair', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.error('Repair API failed:', response.status);
@@ -86,7 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     } catch (error) {
-      console.error('Repair error:', error);
+      if (error.name === 'AbortError') {
+        console.warn('Repair request timed out');
+      } else {
+        console.error('Repair error:', error);
+      }
       return null;
     }
   }, []);
@@ -114,33 +124,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
-      const { data: subData } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      const [subResult, usageResult, integrationsResult] = await Promise.allSettled([
+        supabase.from('subscriptions').select('*').eq('user_id', userId).single(),
+        supabase.from('usage_tracking').select('*').eq('user_id', userId).eq('month_year', getCurrentMonthYear()).single(),
+        supabase.from('user_integrations').select('*').eq('user_id', userId),
+      ]);
 
-      const monthYear = getCurrentMonthYear();
-      let { data: usageData } = await supabase
-        .from('usage_tracking')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('month_year', monthYear)
-        .single();
+      const subData = subResult.status === 'fulfilled' ? subResult.value.data : null;
+      let usageData = usageResult.status === 'fulfilled' ? usageResult.value.data : null;
+      const integrationsData = integrationsResult.status === 'fulfilled' ? integrationsResult.value.data : [];
 
       if (!usageData) {
         const { data: newUsage } = await supabase
           .from('usage_tracking')
           .insert({
             user_id: userId,
-            month_year: monthYear,
+            month_year: getCurrentMonthYear(),
             ai_tokens_used: 0,
             voice_minutes_used: 0,
             whatsapp_messages_sent: 0,
             emails_sent: 0,
           })
           .select()
-          .single();
+          .single()
+          .then(result => result)
+          .catch(() => ({ data: null }));
         usageData = newUsage;
       }
 
@@ -150,14 +158,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('plan_limits')
           .select('*')
           .eq('plan', subData.plan)
-          .single();
+          .single()
+          .then(result => result)
+          .catch(() => ({ data: null }));
         planLimitsData = limits;
       }
-
-      const { data: integrationsData } = await supabase
-        .from('user_integrations')
-        .select('*')
-        .eq('user_id', userId);
 
       const fullProfile: ProfileWithSubscription = {
         ...profileData,
@@ -173,7 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('profiles')
         .update({ last_active_at: new Date().toISOString() })
         .eq('id', userId)
-        .then(() => {});
+        .then(() => {})
+        .catch(() => {});
 
       return fullProfile;
     } catch (error) {

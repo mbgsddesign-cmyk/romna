@@ -275,6 +275,12 @@ Structure:
 }
 `;
 
+const ACTION_TIERS: Record<string, 'free' | 'pro'> = {
+  create_task: 'free',
+  reschedule_event: 'pro',
+  send_email: 'pro'
+};
+
 export class AutoGLM {
   static async run(userId: string, trigger: 'daily_scan' | 'new_insight' | 'voice_intent', context: Record<string, any> = {}) {
     console.log(`[AutoGLM] Running for user ${userId} with trigger ${trigger}`);
@@ -407,28 +413,61 @@ export class AutoGLM {
 
       // 7.2 Action Candidate (Human-in-the-loop)
       let actionHash: string | null = null;
-      if (result.action_candidate && result.action_candidate.confidence >= 0.8) {
-         const payloadString = JSON.stringify(result.action_candidate.payload);
-         actionHash = createHash('md5').update(payloadString + Date.now().toString()).digest('hex'); // Unique hash for this instance
+      let actionStatus: 'pending' | 'blocked_pro' | 'none' = 'none';
 
-         await supabase.from('user_activity').insert({
-           user_id: userId,
-           action: 'action_proposed',
-           meta: {
-             ...result.action_candidate,
-             status: 'pending',
-             action_hash: actionHash,
-             created_at: new Date().toISOString()
-           }
-         });
+      if (result.action_candidate && result.action_candidate.confidence >= 0.8) {
+         const actionType = result.action_candidate.type;
+         const requiredTier = ACTION_TIERS[actionType] || 'pro'; // Default to pro for safety
+         const userTier = userPrefs.plan_tier || 'free';
          
-         console.log(`[AutoGLM] Action proposed: ${result.action_candidate.type} (${actionHash})`);
+         const isAllowed = userTier === 'enterprise' || 
+                          (userTier === 'pro') || 
+                          (requiredTier === 'free');
+
+         if (isAllowed) {
+             const payloadString = JSON.stringify(result.action_candidate.payload);
+             actionHash = createHash('md5').update(payloadString + Date.now().toString()).digest('hex'); // Unique hash for this instance
+  
+             await supabase.from('user_activity').insert({
+               user_id: userId,
+               action: 'action_proposed',
+               meta: {
+                 ...result.action_candidate,
+                 status: 'pending',
+                 action_hash: actionHash,
+                 created_at: new Date().toISOString()
+               }
+             });
+             
+             actionStatus = 'pending';
+             console.log(`[AutoGLM] Action proposed: ${actionType} (${actionHash})`);
+         } else {
+             // Blocked by Pro Matrix
+             actionStatus = 'blocked_pro';
+             
+             await supabase.from('user_activity').insert({
+                 user_id: userId,
+                 action: 'pro_blocked_action',
+                 meta: {
+                     attempted_action: actionType,
+                     required_tier: requiredTier,
+                     user_tier: userTier,
+                     confidence: result.action_candidate.confidence,
+                     created_at: new Date().toISOString()
+                 }
+             });
+
+             console.log(`[AutoGLM] Action blocked (Pro only): ${actionType} for user ${userId}`);
+         }
       }
 
       // 7.3 Notification
       if (result.notification) {
         const dispatcher = new NotificationDispatcher(supabase);
         
+        // If action was blocked, we strip the action URL but keep the insight
+        const isActionBlocked = actionStatus === 'blocked_pro';
+
         await dispatcher.dispatch(
           userId,
           {
@@ -437,13 +476,15 @@ export class AutoGLM {
             priority: result.notification.priority === 1 ? 'high' : 'normal',
             ai_reason: result.notification.ai_reason,
             category: 'ai',
-            // Link notification to the action if present
-            action_url: actionHash ? `/api/actions/execute?hash=${actionHash}` : null,
+            // Link notification to the action if present AND allowed
+            // Point to frontend verification page, not direct API execution
+            action_url: actionHash ? `/actions/verify/${actionHash}` : null,
             action_label: actionHash ? 'Confirm Action' : null,
             metadata: { 
               trigger,
-              pro_eligible: result.notification.pro_eligible || false,
-              action_hash: actionHash
+              pro_eligible: result.notification.pro_eligible || isActionBlocked || false,
+              action_hash: actionHash,
+              action_status: actionStatus
             }
           },
           userPrefs

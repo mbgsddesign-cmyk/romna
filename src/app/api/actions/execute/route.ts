@@ -1,5 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { UserActivity } from '@/lib/database.types';
+
+interface ActionPayload {
+  title?: string;
+  description?: string;
+  due_date?: string;
+  priority?: string;
+  event_id?: string;
+  start_time?: string;
+  end_time?: string;
+  [key: string]: unknown;
+}
+
+interface ActivityMeta {
+  type: string;
+  payload: ActionPayload;
+  status: string;
+  action_hash?: string;
+  execution_result?: unknown;
+  [key: string]: unknown;
+}
 
 export async function POST(request: NextRequest) {
   const supabase = createClient(
@@ -44,7 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Action not found or invalid' }, { status: 404 });
     }
 
-    const meta = activity.meta as any;
+    const meta = activity.meta as unknown as ActivityMeta;
 
     // 4. Idempotency Check
     if (meta.status === 'executed') {
@@ -70,8 +91,8 @@ export async function POST(request: NextRequest) {
         .from('tasks')
         .insert({
           user_id: user.id,
-          title: payload.title,
-          description: payload.description,
+          title: payload.title || 'Untitled Task',
+          description: payload.description || '',
           due_date: payload.due_date,
           priority: payload.priority || 'normal',
           status: 'pending'
@@ -141,10 +162,10 @@ export async function POST(request: NextRequest) {
       data: executionResult
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Execution error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

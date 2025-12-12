@@ -282,7 +282,7 @@ const ACTION_TIERS: Record<string, 'free' | 'pro'> = {
 };
 
 export class AutoGLM {
-  static async run(userId: string, trigger: 'daily_scan' | 'new_insight' | 'voice_intent', context: Record<string, any> = {}) {
+  static async run(userId: string, trigger: 'daily_scan' | 'new_insight' | 'voice_intent', context: Record<string, unknown> = {}) {
     console.log(`[AutoGLM] Running for user ${userId} with trigger ${trigger}`);
 
     // 1. Fetch User Preferences
@@ -510,9 +510,9 @@ export class AutoGLM {
 
       return { success: true, result };
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('[AutoGLM] Error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
 }

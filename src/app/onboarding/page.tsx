@@ -3,13 +3,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { Mic, CheckSquare, CalendarDays, Sparkles, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
-import { useTranslation } from '@/hooks/use-translation';
+import { Mic, CheckSquare, CalendarDays, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { SmartTaskVisual } from './smart-task-visual';
 
 const onboardingScreens = [
   {
@@ -27,14 +27,15 @@ const onboardingScreens = [
   {
     id: 'tasks',
     icon: CheckSquare,
+    visual: <SmartTaskVisual />,
     gradient: 'from-accent via-teal to-success',
     bgGradient: 'from-accent/10 via-teal/5 to-transparent',
-    titleEn: 'Smart Tasks',
-    titleAr: 'المهام الذكية',
-    subtitleEn: 'Never forget anything.',
-    subtitleAr: 'لا تنسَ أي شيء.',
-    descEn: 'Add tasks instantly using voice or text.',
-    descAr: 'أضف المهام فوراً باستخدام الصوت أو النص.',
+    titleEn: 'Smart Task Creation',
+    titleAr: 'إنشاء المهام الذكية',
+    subtitleEn: 'Turn thoughts into plans.',
+    subtitleAr: 'حول أفكارك إلى خطط.',
+    descEn: 'Whether you type or talk, ROMANA detects dates and times automatically.',
+    descAr: 'سواء كتبت أو تحدثت، تكتشف رومنا التواريخ والأوقات تلقائياً.',
   },
   {
     id: 'calendar',
@@ -66,10 +67,9 @@ export default function OnboardingPage() {
   const [currentScreen, setCurrentScreen] = useState(0);
   const [direction, setDirection] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
-  const { locale, setLocale } = useAppStore();
+  const { locale } = useAppStore();
   const { user, profile, refreshProfile } = useAuth();
   const router = useRouter();
-  const { t } = useTranslation();
 
   const isRTL = locale === 'ar';
   const isLastScreen = currentScreen === onboardingScreens.length - 1;
@@ -165,26 +165,37 @@ export default function OnboardingPage() {
 
   return (
     <div className={cn(
-      "min-h-screen flex flex-col overflow-hidden",
-      `bg-gradient-to-br ${screen.bgGradient}`
+      "min-h-screen flex flex-col overflow-hidden bg-background",
+      // Only apply gradient background if no custom visual, or make it subtle
+      !screen.visual && `bg-gradient-to-br ${screen.bgGradient}`
     )}>
-      <header className="flex items-center justify-between px-5 pt-6 pb-2">
-        <button
-          onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-          className="px-3 py-1.5 rounded-full bg-muted/50 text-sm font-medium hover:bg-muted transition-colors"
-        >
-          {locale === 'ar' ? 'EN' : 'عربي'}
-        </button>
+      {/* Top Navigation & Progress */}
+      <header className="flex items-center justify-between px-6 pt-6 pb-2 z-10">
+        <div className="flex flex-1 gap-2 mr-8 rtl:mr-0 rtl:ml-8">
+          {onboardingScreens.map((_, index) => (
+             <div 
+               key={index}
+               className={cn(
+                 "h-1.5 flex-1 rounded-full transition-all duration-300",
+                 index <= currentScreen 
+                   ? "bg-primary shadow-[0_0_10px_rgba(48,232,122,0.3)]" 
+                   : "bg-muted/50 dark:bg-white/10"
+               )}
+             />
+          ))}
+        </div>
         <button
           onClick={handleSkip}
           disabled={isCompleting}
-          className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          className="group flex items-center"
         >
-          {locale === 'ar' ? 'تخطي' : 'Skip'}
+          <p className="text-muted-foreground text-sm font-semibold tracking-wide transition-colors group-hover:text-primary">
+            {locale === 'ar' ? 'تخطي' : 'Skip'}
+          </p>
         </button>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 relative z-0">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={screen.id}
@@ -198,116 +209,85 @@ export default function OnboardingPage() {
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={handleDragEnd}
-            className="w-full max-w-sm text-center cursor-grab active:cursor-grabbing"
+            className="w-full max-w-md mx-auto text-center cursor-grab active:cursor-grabbing flex flex-col items-center"
           >
-            <motion.div
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
-              className={cn(
-                "w-28 h-28 mx-auto mb-8 rounded-3xl flex items-center justify-center shadow-2xl",
-                `bg-gradient-to-br ${screen.gradient}`
-              )}
-            >
-              <screen.icon className="w-14 h-14 text-white" strokeWidth={1.5} />
-            </motion.div>
+            {screen.visual ? (
+              <div className="mb-6 w-full">
+                {screen.visual}
+              </div>
+            ) : (
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
+                className={cn(
+                  "w-32 h-32 mx-auto mb-12 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(0,0,0,0.1)] dark:shadow-[0_0_40px_rgba(48,232,122,0.1)]",
+                  `bg-gradient-to-br ${screen.gradient}`
+                )}
+              >
+                <screen.icon className="w-16 h-16 text-white" strokeWidth={1.5} />
+              </motion.div>
+            )}
 
-            <motion.h1
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.15 }}
-              className="text-2xl font-extrabold mb-3"
-            >
-              {locale === 'ar' ? screen.titleAr : screen.titleEn}
-            </motion.h1>
+            <div className="text-center mb-8 px-4">
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.15 }}
+                className="text-primary text-sm font-bold uppercase tracking-wider mb-3"
+              >
+                {locale === 'ar' ? screen.titleAr : screen.titleEn}
+              </motion.p>
+              
+              <motion.h1
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="text-3xl font-bold leading-tight mb-4 tracking-tight"
+              >
+                 {locale === 'ar' ? screen.subtitleAr : screen.subtitleEn}
+              </motion.h1>
 
-            <motion.p
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className={cn(
-                "text-xl font-bold mb-4 bg-clip-text text-transparent",
-                `bg-gradient-to-r ${screen.gradient}`
-              )}
-            >
-              {locale === 'ar' ? screen.subtitleAr : screen.subtitleEn}
-            </motion.p>
-
-            <motion.p
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.25 }}
-              className="text-muted-foreground text-base leading-relaxed"
-            >
-              {locale === 'ar' ? screen.descAr : screen.descEn}
-            </motion.p>
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.25 }}
+                className="text-muted-foreground text-base leading-relaxed max-w-[320px] mx-auto"
+              >
+                {locale === 'ar' ? screen.descAr : screen.descEn}
+              </motion.p>
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <div className="flex justify-center gap-2 py-6">
-        {onboardingScreens.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => goToScreen(index)}
-            className={cn(
-              "h-2 rounded-full transition-all duration-300",
-              index === currentScreen
-                ? "w-8 bg-accent"
-                : "w-2 bg-muted hover:bg-muted-foreground/30"
+      <div className="px-6 pb-8 pt-4 w-full max-w-md mx-auto safe-area-bottom">
+        {isLastScreen ? (
+          <Button
+            size="lg"
+            onClick={handleComplete}
+            disabled={isCompleting}
+            className="w-full h-16 rounded-full font-bold text-lg shadow-[0_0_20px_rgba(48,232,122,0.3)] bg-primary hover:bg-primary/90 text-primary-foreground group"
+          >
+            {isCompleting ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <>
+                <span>{locale === 'ar' ? 'ابدأ الآن' : 'Get Started'}</span>
+                <ArrowRight className={cn("w-6 h-6 ml-2 group-hover:translate-x-1 transition-transform", isRTL && "rotate-180 mr-2 ml-0 group-hover:-translate-x-1")} />
+              </>
             )}
-          />
-        ))}
-      </div>
-
-      <div className="px-5 pb-8 safe-area-bottom">
-        <div className="flex gap-3">
-          {currentScreen > 0 && (
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={handlePrev}
-              className="flex-1 h-14 rounded-2xl border-2"
-              disabled={isCompleting}
-            >
-              <ChevronLeft className={cn("w-5 h-5", isRTL && "rotate-180")} />
-              <span>{locale === 'ar' ? 'السابق' : 'Back'}</span>
-            </Button>
-          )}
-          
-          {isLastScreen ? (
-            <Button
-              size="lg"
-              onClick={handleComplete}
-              disabled={isCompleting}
-              className={cn(
-                "flex-1 h-14 rounded-2xl font-semibold text-base",
-                `bg-gradient-to-r ${screen.gradient}`
-              )}
-            >
-              {isCompleting ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <span>{locale === 'ar' ? 'ابدأ الآن' : 'Get Started'}</span>
-                  <ChevronRight className={cn("w-5 h-5", isRTL && "rotate-180")} />
-                </>
-              )}
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              onClick={handleNext}
-              className={cn(
-                "flex-1 h-14 rounded-2xl font-semibold text-base",
-                `bg-gradient-to-r ${screen.gradient}`
-              )}
-            >
-              <span>{locale === 'ar' ? 'التالي' : 'Continue'}</span>
-              <ChevronRight className={cn("w-5 h-5", isRTL && "rotate-180")} />
-            </Button>
-          )}
-        </div>
+          </Button>
+        ) : (
+          <Button
+            size="lg"
+            onClick={handleNext}
+            className="w-full h-16 rounded-full font-bold text-lg shadow-[0_0_20px_rgba(48,232,122,0.3)] bg-primary hover:bg-primary/90 text-primary-foreground group"
+          >
+            <span>{locale === 'ar' ? 'التالي' : 'Next'}</span>
+            <ArrowRight className={cn("w-6 h-6 ml-2 group-hover:translate-x-1 transition-transform", isRTL && "rotate-180 mr-2 ml-0 group-hover:-translate-x-1")} />
+          </Button>
+        )}
       </div>
     </div>
   );

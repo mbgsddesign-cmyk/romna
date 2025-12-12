@@ -9,90 +9,106 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Bell, Sparkles, Calendar, Clock, CheckCircle2, X, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type NotificationType = 'all' | 'insights' | 'ai' | 'reminders';
 
-interface MockNotification {
+interface Notification {
   id: string;
-  type: NotificationType;
+  type: string;
   title: string;
   message: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   category: string;
-  time: string;
-  actions?: { label: string; variant?: 'default' | 'secondary' | 'outline' }[];
-  isPro?: boolean;
+  created_at: string;
+  action_url?: string;
+  action_label?: string;
+  is_read: boolean;
+  metadata?: any;
 }
-
-const mockNotifications: MockNotification[] = [
-  {
-    id: '1',
-    type: 'ai',
-    title: 'Meeting Conflict Detected',
-    message: 'Your 3 PM meeting with team overlaps with focus session',
-    priority: 'high',
-    category: 'conflict',
-    time: '2m ago',
-    actions: [
-      { label: 'Optimize Schedule', variant: 'default' },
-      { label: 'Dismiss', variant: 'outline' }
-    ]
-  },
-  {
-    id: '2',
-    type: 'reminders',
-    title: 'Grocery Shopping',
-    message: 'Pick up groceries on the way home',
-    priority: 'normal',
-    category: 'task',
-    time: '1h ago',
-    actions: [
-      { label: 'Mark Done', variant: 'default' },
-      { label: 'Snooze', variant: 'outline' }
-    ]
-  },
-  {
-    id: '3',
-    type: 'insights',
-    title: 'Pro Insight Available',
-    message: 'Your productivity peaks at 10 AM - schedule important work then',
-    priority: 'normal',
-    category: 'insight',
-    time: '3h ago',
-    isPro: true,
-    actions: [
-      { label: 'View Insights', variant: 'default' }
-    ]
-  },
-  {
-    id: '4',
-    type: 'ai',
-    title: 'Daily Summary Ready',
-    message: '8 tasks completed, 3 pending for tomorrow',
-    priority: 'low',
-    category: 'summary',
-    time: '5h ago',
-    actions: [
-      { label: 'View Summary', variant: 'secondary' }
-    ]
-  }
-];
 
 export default function NotificationsPage() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<NotificationType>('all');
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClientComponentClient();
 
-  const filteredNotifications = activeTab === 'all' 
-    ? notifications 
-    : notifications.filter(n => n.type === activeTab);
+  useEffect(() => {
+    fetchNotifications();
+    
+    const channel = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications'
+        },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
 
-  const unreadCount = notifications.filter(n => n.priority !== 'low').length;
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab]);
 
-  const handleDismiss = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  const fetchNotifications = async () => {
+    try {
+      const category = activeTab === 'all' ? null : activeTab;
+      const url = category 
+        ? `/api/notifications/all?category=${category}`
+        : '/api/notifications/all';
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.notifications);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId: id })
+      });
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+      );
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const filteredNotifications = notifications;
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  if (loading) {
+    return (
+      <PageWrapper className="px-5">
+        <div className="mobile-container pt-8">
+          <Skeleton className="h-10 w-48 mb-6" />
+          <Skeleton className="h-12 w-full mb-4" />
+          <Skeleton className="h-32 w-full mb-3" />
+          <Skeleton className="h-32 w-full mb-3" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper className="px-5">
@@ -103,65 +119,42 @@ export default function NotificationsPage() {
               {locale === 'ar' ? 'الإشعارات' : 'Notifications'}
             </h1>
             {unreadCount > 0 && (
-              <Badge variant="secondary" className="bg-accent/10 text-accent border-accent/20">
-                {unreadCount} {locale === 'ar' ? 'جديد' : 'new'}
+              <Badge className="bg-accent text-accent-foreground">
+                {unreadCount}
               </Badge>
             )}
           </div>
           <p className="text-muted-foreground text-[14px]">
-            {locale === 'ar' 
-              ? 'ابق على اطلاع بتحديثاتك الذكية' 
-              : 'Stay updated with your smart notifications'}
+            {locale === 'ar' ? 'ابقَ على اطلاع' : 'Stay updated'}
           </p>
         </header>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as NotificationType)} className="mb-6">
-          <TabsList className="grid w-full grid-cols-4 bg-card/50 backdrop-blur-sm">
-            <TabsTrigger value="all" className="text-[13px]">
-              {locale === 'ar' ? 'الكل' : 'All'}
-            </TabsTrigger>
-            <TabsTrigger value="insights" className="text-[13px]">
-              {locale === 'ar' ? 'رؤى' : 'Insights'}
-            </TabsTrigger>
-            <TabsTrigger value="ai" className="text-[13px]">
-              {locale === 'ar' ? 'AI' : 'AI'}
-            </TabsTrigger>
-            <TabsTrigger value="reminders" className="text-[13px]">
-              {locale === 'ar' ? 'تذكيرات' : 'Reminders'}
-            </TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as NotificationType)} className="mb-4">
+          <TabsList className="grid w-full grid-cols-4 h-11 rounded-[14px] p-1 bg-muted">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="ai">AI</TabsTrigger>
+            <TabsTrigger value="insights">Insights</TabsTrigger>
+            <TabsTrigger value="reminders">Reminders</TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <motion.div 
-          className="space-y-3 pb-24"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          {filteredNotifications.length > 0 ? (
-            filteredNotifications.map((notification, index) => (
-              <motion.div
-                key={notification.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <NotificationCard 
-                  notification={notification}
-                  onDismiss={() => handleDismiss(notification.id)}
-                  locale={locale}
-                />
-              </motion.div>
-            ))
-          ) : (
-            <Card className="p-12 text-center">
-              <Bell className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
-              <p className="text-muted-foreground">
-                {locale === 'ar' ? 'لا توجد إشعارات' : 'No notifications'}
-              </p>
+        <div className="pb-24 space-y-3">
+          {filteredNotifications.length === 0 ? (
+            <Card className="p-8 text-center">
+              <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">No notifications yet</p>
             </Card>
+          ) : (
+            filteredNotifications.map((notif, index) => (
+              <NotificationCard
+                key={notif.id}
+                notification={notif}
+                index={index}
+                onMarkRead={handleMarkRead}
+              />
+            ))
           )}
-        </motion.div>
+        </div>
       </div>
     </PageWrapper>
   );
@@ -169,90 +162,101 @@ export default function NotificationsPage() {
 
 function NotificationCard({ 
   notification, 
-  onDismiss, 
-  locale 
+  index, 
+  onMarkRead 
 }: { 
-  notification: MockNotification; 
-  onDismiss: () => void;
-  locale: string;
+  notification: Notification; 
+  index: number;
+  onMarkRead: (id: string) => void;
 }) {
-  const priorityColors = {
-    urgent: 'border-l-4 border-l-error',
-    high: 'border-l-4 border-l-warning',
-    normal: 'border-l-2 border-l-accent',
-    low: 'border-l-2 border-l-border'
-  };
-
-  const categoryIcons = {
-    conflict: Calendar,
-    task: CheckCircle2,
-    insight: Sparkles,
-    summary: Clock
-  };
-
-  const Icon = categoryIcons[notification.category as keyof typeof categoryIcons] || Bell;
-
+  const timeAgo = getTimeAgo(notification.created_at);
+  
   return (
-    <Card className={cn(
-      "p-4 relative overflow-hidden",
-      priorityColors[notification.priority],
-      "hover:shadow-md transition-all"
-    )}>
-      <button
-        onClick={onDismiss}
-        className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-muted transition-colors"
-      >
-        <X className="w-4 h-4 text-muted-foreground" />
-      </button>
-
-      <div className="flex items-start gap-3 mb-3">
-        <div className={cn(
-          "w-10 h-10 rounded-[12px] flex items-center justify-center shrink-0",
-          notification.priority === 'high' || notification.priority === 'urgent'
-            ? "bg-accent/15"
-            : "bg-primary/10"
-        )}>
-          <Icon className={cn(
-            "w-5 h-5",
-            notification.priority === 'high' || notification.priority === 'urgent'
-              ? "text-accent"
-              : "text-primary"
-          )} />
-        </div>
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Card className={cn(
+        "p-4 hover:shadow-md transition-all relative",
+        !notification.is_read && "border-l-4 border-l-accent"
+      )}>
+        {notification.priority === 'urgent' && (
+          <div className="absolute top-2 right-2">
+            <Badge variant="destructive" className="text-[10px] h-5">URGENT</Badge>
+          </div>
+        )}
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-[14px] font-semibold truncate">{notification.title}</h3>
-            {notification.isPro && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-accent/30 text-accent">
-                PRO
-              </Badge>
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            "w-10 h-10 rounded-[12px] flex items-center justify-center shrink-0",
+            notification.priority === 'urgent' ? "bg-destructive/10" : "bg-accent/10"
+          )}>
+            {notification.category === 'insight' && <Sparkles className="w-5 h-5 text-accent" />}
+            {notification.category === 'conflict' && <Calendar className="w-5 h-5 text-destructive" />}
+            {notification.category === 'summary' && <CheckCircle2 className="w-5 h-5 text-primary" />}
+            {!['insight', 'conflict', 'summary'].includes(notification.category) && (
+              <Clock className="w-5 h-5 text-primary" />
             )}
           </div>
-          <p className="text-[13px] text-muted-foreground leading-relaxed mb-2">
-            {notification.message}
-          </p>
-          <span className="text-[11px] text-muted-foreground/70">{notification.time}</span>
-        </div>
-      </div>
-
-      {notification.actions && notification.actions.length > 0 && (
-        <div className="flex gap-2 mt-3">
-          {notification.actions.map((action, index) => (
-            <Button
-              key={index}
-              size="sm"
-              variant={action.variant || 'default'}
-              className="text-[12px] h-8 flex-1"
-            >
-              {action.label}
-              {action.variant === 'default' && (
-                <ArrowRight className="w-3 h-3 ml-1" />
+          
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[14px] font-semibold">{notification.title}</h3>
+              {notification.metadata?.isPro && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-accent/30 text-accent">
+                  PRO
+                </Badge>
               )}
-            </Button>
-          ))}
+            </div>
+            <p className="text-[13px] text-muted-foreground leading-relaxed mb-3">
+              {notification.message}
+            </p>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">{timeAgo}</span>
+              <div className="flex gap-2">
+                {notification.action_label && (
+                  <Button 
+                    size="sm" 
+                    variant="default" 
+                    className="h-8 text-[12px]"
+                    onClick={() => {
+                      if (notification.action_url) {
+                        window.location.href = notification.action_url;
+                      }
+                      onMarkRead(notification.id);
+                    }}
+                  >
+                    {notification.action_label}
+                  </Button>
+                )}
+                {!notification.is_read && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-8 text-[12px]"
+                    onClick={() => onMarkRead(notification.id)}
+                  >
+                    Dismiss
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
-    </Card>
+      </Card>
+    </motion.div>
   );
+}
+
+function getTimeAgo(timestamp: string): string {
+  const now = new Date();
+  const date = new Date(timestamp);
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }

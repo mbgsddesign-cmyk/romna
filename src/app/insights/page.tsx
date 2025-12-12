@@ -17,6 +17,9 @@ import {
   Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ProductivityMetric {
   label: string;
@@ -71,6 +74,42 @@ const weeklyData = [
 
 export default function InsightsPage() {
   const { t, locale } = useTranslation();
+  const [insights, setInsights] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClientComponentClient();
+
+  useEffect(() => {
+    fetchInsights();
+  }, []);
+
+  const fetchInsights = async () => {
+    try {
+      const res = await fetch('/api/insights/today');
+      const data = await res.json();
+      if (data.success) {
+        setInsights(data.insights);
+      }
+    } catch (error) {
+      console.error('Failed to fetch insights:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const latestInsight = insights[0];
+
+  if (loading) {
+    return (
+      <PageWrapper className="px-5">
+        <div className="mobile-container pt-8">
+          <Skeleton className="h-10 w-40 mb-2" />
+          <Skeleton className="h-4 w-full mb-8" />
+          <Skeleton className="h-48 w-full mb-6" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper className="px-5">
@@ -91,54 +130,52 @@ export default function InsightsPage() {
           </p>
         </header>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <Card className="p-5 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent border-accent/20">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
-                <Sparkles className="w-6 h-6 text-white" />
+        {latestInsight && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <Card className="p-5 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent border-accent/20">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-[18px] font-bold mb-1">{latestInsight.title}</h2>
+                  <p className="text-[13px] text-muted-foreground">
+                    {latestInsight.description}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-[18px] font-bold mb-1">Today at a Glance</h2>
-                <p className="text-[13px] text-muted-foreground">
-                  Your most productive day this week!
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {todayMetrics.map((metric, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-card/80 backdrop-blur-sm rounded-[16px] p-3 text-center"
-                >
-                  <p className="text-[11px] text-muted-foreground mb-1">{metric.label}</p>
-                  <p className="text-[20px] font-bold">{metric.value}</p>
-                  {metric.change && (
-                    <div className="flex items-center justify-center gap-1 mt-1">
-                      <TrendingUp className={cn(
-                        "w-3 h-3",
-                        metric.trend === 'up' ? "text-success" : "text-error"
-                      )} />
-                      <span className={cn(
-                        "text-[10px] font-semibold",
-                        metric.trend === 'up' ? "text-success" : "text-error"
-                      )}>
-                        {metric.change}
-                      </span>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </Card>
-        </motion.div>
+              {latestInsight.insight_data?.metrics && (
+                <div className="grid grid-cols-3 gap-3">
+                  {latestInsight.insight_data.metrics.map((metric: any, index: number) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-card/80 backdrop-blur-sm rounded-[16px] p-3 text-center"
+                    >
+                      <p className="text-[11px] text-muted-foreground mb-1">{metric.label}</p>
+                      <p className="text-[20px] font-bold">{metric.value}</p>
+                      {metric.change && (
+                        <div className="flex items-center justify-center gap-1 mt-1">
+                          <TrendingUp className="w-3 h-3 text-success" />
+                          <span className="text-[10px] font-semibold text-success">
+                            {metric.change}
+                          </span>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </motion.div>
+        )}
 
         <section className="mb-6">
           <h3 className="text-[16px] font-bold mb-3 flex items-center gap-2">
@@ -220,13 +257,13 @@ export default function InsightsPage() {
               <div className="flex-1">
                 <h3 className="text-[15px] font-bold mb-2">AI-Generated Insight</h3>
                 <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
-                  Based on your patterns, you tend to be 40% more productive in morning hours. 
-                  Consider scheduling your most important tasks between 10 AM and 12 PM for 
-                  optimal results.
+                  {latestInsight?.description || 'No insights available yet. Start tracking your productivity!'}
                 </p>
-                <Button size="sm" variant="default" className="w-full">
-                  Apply Recommendations
-                </Button>
+                {latestInsight?.action_primary && (
+                  <Button size="sm" variant="default" className="w-full">
+                    {latestInsight.action_primary}
+                  </Button>
+                )}
               </div>
             </div>
           </Card>

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import ffmpeg from 'fluent-ffmpeg';
+import { promisify } from 'util';
+import { writeFile, unlink, readFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 // Maximum audio duration in seconds (15 seconds for safety)
 const MAX_DURATION_SECONDS = 15;
@@ -11,6 +16,59 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+/**
+ * Convert WebM/Opus audio to WAV PCM 16kHz mono format required by Fun-ASR
+ */
+async function convertToWAV(inputBuffer: Buffer): Promise<{ buffer: Buffer; duration: number }> {
+  const tempInput = join(tmpdir(), `input-${Date.now()}.webm`);
+  const tempOutput = join(tmpdir(), `output-${Date.now()}.wav`);
+
+  try {
+    // Write input buffer to temp file
+    await writeFile(tempInput, inputBuffer);
+
+    // Convert using ffmpeg
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(tempInput)
+        .outputOptions([
+          '-ar', '16000',    // Sample rate: 16kHz
+          '-ac', '1',        // Channels: 1 (mono)
+          '-f', 'wav',       // Format: WAV
+          '-acodec', 'pcm_s16le', // Codec: PCM signed 16-bit little-endian
+        ])
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .save(tempOutput);
+    });
+
+    // Get audio duration
+    const duration = await new Promise<number>((resolve, reject) => {
+      ffmpeg.ffprobe(tempOutput, (err, metadata) => {
+        if (err) reject(err);
+        else resolve(metadata.format.duration || 0);
+      });
+    });
+
+    // Read converted WAV file
+    const wavBuffer = await readFile(tempOutput);
+
+    // Cleanup temp files
+    await Promise.all([
+      unlink(tempInput).catch(() => {}),
+      unlink(tempOutput).catch(() => {}),
+    ]);
+
+    return { buffer: wavBuffer, duration };
+  } catch (error) {
+    // Cleanup on error
+    await Promise.all([
+      unlink(tempInput).catch(() => {}),
+      unlink(tempOutput).catch(() => {}),
+    ]);
+    throw error;
+  }
+}
 
 export async function POST(request: NextRequest) {
   let tempFilePath: string | null = null;
@@ -47,21 +105,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Fun-ASR] Processing audio:', {
+    const inputMimeType = audioFile.type || 'unknown';
+    console.log('[Fun-ASR] Sending audio for transcription:', {
       size: audioFile.size,
-      type: audioFile.type,
+      type: inputMimeType,
       maxDuration: MAX_DURATION_SECONDS,
     });
 
-    // Step 1: Upload audio to Supabase temp storage
-    const filename = `voice-${Date.now()}-${Math.random().toString(36).slice(2)}.webm`;
+    // Step 1: Convert WebM/Opus to WAV PCM 16kHz mono
+    const inputBuffer = Buffer.from(await audioFile.arrayBuffer());
+    
+    let wavBuffer: Buffer;
+    let audioDuration: number;
+    
+    try {
+      const converted = await convertToWAV(inputBuffer);
+      wavBuffer = converted.buffer;
+      audioDuration = converted.duration;
+      
+      console.log('[Fun-ASR] Audio converted:', {
+        originalSize: audioFile.size,
+        wavSize: wavBuffer.length,
+        duration: `${audioDuration.toFixed(2)}s`,
+      });
+
+      // Validate duration
+      if (audioDuration > MAX_DURATION_SECONDS) {
+        return NextResponse.json(
+          { error: `Audio too long. Maximum duration is ${MAX_DURATION_SECONDS} seconds` },
+          { status: 400 }
+        );
+      }
+
+      // Validate converted audio is not empty
+      if (wavBuffer.length < 1000) { // WAV header + minimal audio data
+        return NextResponse.json(
+          { error: 'Converted audio is empty or too short' },
+          { status: 400 }
+        );
+      }
+    } catch (conversionError) {
+      console.error('[Fun-ASR] Conversion error:', conversionError);
+      return NextResponse.json(
+        { error: 'Failed to convert audio format' },
+        { status: 500 }
+      );
+    }
+
+    // Step 2: Upload WAV to Supabase temp storage
+    const filename = `voice-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`;
     tempFilePath = `temp-asr/${filename}`;
     
-    const arrayBuffer = await audioFile.arrayBuffer();
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('voice-temp')
-      .upload(tempFilePath, arrayBuffer, {
-        contentType: audioFile.type || 'audio/webm',
+      .upload(tempFilePath, wavBuffer, {
+        contentType: 'audio/wav',
         upsert: false,
       });
 
@@ -73,16 +171,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 2: Get public URL
+    // Step 3: Get public URL
     const { data: urlData } = supabase.storage
       .from('voice-temp')
       .getPublicUrl(tempFilePath);
     
     const fileUrl = urlData.publicUrl;
     
-    console.log('[Fun-ASR] Audio uploaded, calling ASR with URL:', fileUrl);
+    console.log('[Fun-ASR] WAV uploaded, calling ASR with URL:', fileUrl);
 
-    // Step 3: Call Fun-ASR async_call with file URL
+    // Step 4: Call Fun-ASR async_call with file URL
     const asrPayload = {
       model: 'fun-asr',
       input: {
@@ -118,27 +216,28 @@ export async function POST(request: NextRequest) {
         { 
           error: 'Transcription failed', 
           details: errorText,
-          provider: 'Fun-ASR (Alibaba Cloud International)'
+          provider: 'dashscope-fun-asr-intl'
         },
         { status: asrResponse.status }
       );
     }
 
     const asrData = await asrResponse.json();
-    console.log('[Fun-ASR] Task submitted:', asrData);
-
-    // Step 4: Poll for completion
     const taskId = asrData.output?.task_id;
+    
+    console.log('[Fun-ASR] Task submitted:', { task_id: taskId });
+
     if (!taskId) {
       throw new Error('No task_id returned from Fun-ASR');
     }
 
+    // Step 5: Poll for completion
     let transcript = '';
     let attempts = 0;
-    const maxAttempts = 15;  // 15 seconds max polling
+    const maxAttempts = 10;  // 10 attempts × 500ms = 5 seconds max
 
     while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every 1 second
+      await new Promise(resolve => setTimeout(resolve, 500)); // Poll every 500ms
       
       const pollResponse = await fetch(
         `https://dashscope-intl.aliyuncs.com/api/v1/tasks/${taskId}`,
@@ -157,76 +256,85 @@ export async function POST(request: NextRequest) {
         console.log(`[Fun-ASR] Poll attempt ${attempts + 1}: ${taskStatus}`);
         
         if (taskStatus === 'SUCCEEDED') {
-          // 🔍 CRITICAL: Log FULL response structure for debugging
-          console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData.output:');
-          console.log(JSON.stringify(pollData.output, null, 2));
-          console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData (entire JSON):');
+          // 🔍 CRITICAL: Log FULL response structure
+          console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData:');
           console.log(JSON.stringify(pollData, null, 2));
           
-          // Track all paths checked for debugging
-          const pathsChecked: string[] = [];
           const output = pollData.output || {};
+          const pathsChecked: string[] = [];
           
-          // PATH 1: output.results[0].transcription.text
-          if (output.results && Array.isArray(output.results) && output.results.length > 0) {
-            const result = output.results[0];
-            pathsChecked.push('output.results[0].transcription.text');
-            if (result.transcription?.text) {
-              transcript = result.transcription.text;
-            }
+          // CANONICAL EXTRACTION based on Fun-ASR International API structure
+          
+          // PATH 1: Check transcription_url (file-based response)
+          if (output.results && Array.isArray(output.results) && output.results[0]?.transcription_url) {
+            const transcriptionUrl = output.results[0].transcription_url;
+            pathsChecked.push('output.results[0].transcription_url');
             
-            // PATH 2: output.results[0].text
-            if (!transcript && result.text) {
+            console.log('[Fun-ASR] Fetching transcript from:', transcriptionUrl);
+            
+            try {
+              const tRes = await fetch(transcriptionUrl);
+              const tJson = await tRes.json();
+              
+              console.log('[Fun-ASR] Transcription JSON keys:', Object.keys(tJson));
+              console.log('[Fun-ASR] Full transcription JSON:');
+              console.log(JSON.stringify(tJson, null, 2));
+              
+              // Extract text from transcription JSON
+              // Try common formats
+              if (tJson.text) {
+                transcript = tJson.text;
+              } else if (tJson.transcription) {
+                transcript = typeof tJson.transcription === 'string' 
+                  ? tJson.transcription 
+                  : tJson.transcription.text || '';
+              } else if (tJson.sentences && Array.isArray(tJson.sentences)) {
+                transcript = tJson.sentences.map((s: any) => s.text || '').join(' ').trim();
+              } else if (tJson.results && Array.isArray(tJson.results)) {
+                transcript = tJson.results.map((r: any) => r.text || '').join(' ').trim();
+              }
+            } catch (fetchError) {
+              console.error('[Fun-ASR] Failed to fetch transcription_url:', fetchError);
+            }
+          }
+          
+          // PATH 2: Direct text fields (inline response)
+          if (!transcript && output.results && Array.isArray(output.results) && output.results.length > 0) {
+            const result = output.results[0];
+            
+            if (result.transcription?.text) {
+              pathsChecked.push('output.results[0].transcription.text');
+              transcript = result.transcription.text;
+            } else if (result.text) {
               pathsChecked.push('output.results[0].text');
               transcript = result.text;
-            }
-            
-            // PATH 3: output.results[0].transcript
-            if (!transcript && result.transcript) {
+            } else if (result.transcript) {
               pathsChecked.push('output.results[0].transcript');
               transcript = result.transcript;
-            }
-            
-            // PATH 4: Join all result.sentences (if segmented)
-            if (!transcript && result.sentences && Array.isArray(result.sentences)) {
-              pathsChecked.push('output.results[0].sentences[] (joined)');
+            } else if (result.sentences && Array.isArray(result.sentences)) {
+              pathsChecked.push('output.results[0].sentences[]');
               transcript = result.sentences.map((s: any) => s.text || '').join(' ').trim();
             }
           }
           
-          // PATH 5: output.result.text
+          // PATH 3: Other possible locations
           if (!transcript && output.result?.text) {
             pathsChecked.push('output.result.text');
             transcript = output.result.text;
           }
           
-          // PATH 6: output.text
           if (!transcript && output.text) {
             pathsChecked.push('output.text');
             transcript = output.text;
           }
           
-          // PATH 7: output.transcription
-          if (!transcript && output.transcription) {
-            pathsChecked.push('output.transcription');
-            transcript = typeof output.transcription === 'string' 
-              ? output.transcription 
-              : output.transcription.text || '';
-          }
-          
-          // PATH 8: output.url (download transcript file - fallback)
-          if (!transcript && output.url) {
-            pathsChecked.push('output.url (transcript file)');
-            // Note: Would require fetching the URL, skipping for now
-          }
-          
           console.log('[Fun-ASR] Paths checked:', pathsChecked);
           console.log('[Fun-ASR] Extracted transcript:', transcript);
           
-          // 🚨 UNIT-SAFE GUARD: If SUCCEEDED but no transcript found, return debug error
+          // 🚨 UNIT-SAFE GUARD
           if (!transcript || transcript.trim() === '') {
-            console.error('[Fun-ASR] ❌ SUCCEEDED but transcript field not found!');
-            console.error('[Fun-ASR] Available keys in output:', Object.keys(output));
+            console.error('[Fun-ASR] ❌ SUCCEEDED but transcript not found!');
+            console.error('[Fun-ASR] Available keys:', Object.keys(output));
             
             // Cleanup before returning error
             if (tempFilePath) {
@@ -238,8 +346,9 @@ export async function POST(request: NextRequest) {
                 error: 'SUCCEEDED but transcript field not found',
                 debug_paths_checked: pathsChecked,
                 debug_output_keys: Object.keys(output),
-                debug_full_output: output,
-                hint: 'Check server logs for full JSON structure'
+                debug_transcription_json_keys: output.results?.[0]?.transcription_url 
+                  ? 'Check server logs for transcription JSON structure' 
+                  : 'No transcription_url available',
               },
               { status: 500 }
             );
@@ -255,24 +364,27 @@ export async function POST(request: NextRequest) {
       attempts++;
     }
 
-    // Step 5: Cleanup temp file
+    // Step 6: Cleanup temp file
     if (tempFilePath) {
       await supabase.storage.from('voice-temp').remove([tempFilePath]);
-      console.log('[Fun-ASR] Temp file cleaned up:', tempFilePath);
+      console.log('[Fun-ASR] Temp file cleaned up');
     }
 
     if (!transcript) {
       return NextResponse.json(
-        { error: 'No transcript returned or timeout exceeded' },
+        { error: 'ASR processing timeout - no response within 5 seconds' },
         { status: 500 }
       );
     }
 
-    console.log('[Fun-ASR] Success! Transcript:', transcript);
-    return NextResponse.json({ transcript });
+    console.log('[Fun-ASR] ✅ Success! Transcript:', transcript);
+    return NextResponse.json({ 
+      transcript,
+      provider: 'dashscope-fun-asr-intl'
+    });
 
   } catch (error) {
-    console.error('[Fun-ASR] Error:', error);
+    console.error('[Fun-ASR] Transcription error:', error);
     
     // Cleanup on error
     if (tempFilePath) {

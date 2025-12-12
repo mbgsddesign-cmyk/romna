@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { PaywallModal } from '@/components/romna/paywall-modal';
 
 type NotificationType = 'all' | 'ai' | 'reminders';
 
@@ -42,6 +43,17 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Paywall state
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState('Pro Feature');
+  const [paywallTrigger, setPaywallTrigger] = useState('notification_unlock');
+
+  const openPaywall = (feature: string, trigger: string) => {
+    setPaywallFeature(feature);
+    setPaywallTrigger(trigger);
+    setShowPaywall(true);
+  };
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -249,6 +261,8 @@ export default function NotificationsPage() {
                   onClick={() => handleMarkRead(n.id)}
                   category={n.category}
                   metadata={n.metadata as any}
+                  onUnlock={() => openPaywall('AI Action', 'blocked_action_click')}
+                  onUpgrade={() => openPaywall('Pro Plan', 'upgrade_button_click')}
                 />
               ))
             )}
@@ -296,6 +310,8 @@ export default function NotificationsPage() {
                   onClick={() => {}}
                   category={n.category}
                   metadata={n.metadata as any}
+                  onUnlock={() => openPaywall('AI Action', 'blocked_action_click')}
+                  onUpgrade={() => openPaywall('Pro Plan', 'upgrade_button_click')}
                 />
               ))
             )}
@@ -314,6 +330,13 @@ export default function NotificationsPage() {
       {/* Background Gradient Overlay */}
       <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#112117] to-transparent pointer-events-none z-10"></div>
       <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#112117] via-[#112117]/80 to-transparent pointer-events-none z-10"></div>
+      
+      <PaywallModal 
+        isOpen={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        featureName={paywallFeature}
+        triggerLocation={paywallTrigger}
+      />
     </div>
   );
 }
@@ -326,7 +349,9 @@ function NotificationItem({
   isUnread, 
   onClick,
   category,
-  metadata
+  metadata,
+  onUnlock,
+  onUpgrade
 }: { 
   title: string; 
   message: string; 
@@ -335,14 +360,26 @@ function NotificationItem({
   isUnread: boolean; 
   onClick?: () => void;
   category?: string;
-  metadata?: { pro_eligible?: boolean; reason?: string };
+  metadata?: { pro_eligible?: boolean; reason?: string; action_status?: string };
+  onUnlock?: () => void;
+  onUpgrade?: () => void;
 }) {
   const isUpsell = category === 'upgrade';
   const isProEligible = metadata?.pro_eligible === true;
+  const isBlocked = metadata?.action_status === 'blocked_pro';
+
+  const handleItemClick = (e: React.MouseEvent) => {
+    if (isBlocked && onUnlock) {
+      e.stopPropagation();
+      onUnlock();
+      return;
+    }
+    if (onClick) onClick();
+  };
 
   return (
     <div 
-      onClick={onClick}
+      onClick={handleItemClick}
       className={cn(
         "group relative w-full touch-pan-x cursor-pointer",
       )}
@@ -360,9 +397,17 @@ function NotificationItem({
             isUpsell ? "bg-accent/20 text-accent" :
             isUnread ? "bg-[#30e87a]/20 text-[#30e87a]" : "bg-[#23362b] text-[#9db8a8]"
           )}>
-            <Icon className="w-6 h-6" />
+            {isBlocked ? <div className="text-accent"><Icon className="w-6 h-6 opacity-50" /></div> : <Icon className="w-6 h-6" />}
+            {isBlocked && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-black/40 rounded-full p-1 backdrop-blur-sm">
+                        {/* Lock icon overlay */}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    </div>
+                </div>
+            )}
           </div>
-          {isUnread && !isUpsell && (
+          {isUnread && !isUpsell && !isBlocked && (
             <div className="absolute -top-1 -right-1 size-3 bg-[#30e87a] rounded-full border-2 border-[#23362b]"></div>
           )}
         </div>
@@ -376,9 +421,14 @@ function NotificationItem({
               )}>
                 {title}
               </p>
-              {isProEligible && !isUpsell && (
+              {isProEligible && !isUpsell && !isBlocked && (
                  <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider border border-accent/20">
                    Pro Insight
+                 </span>
+              )}
+              {isBlocked && (
+                 <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 text-[10px] font-bold uppercase tracking-wider border border-amber-500/20">
+                   Locked
                  </span>
               )}
             </div>
@@ -400,8 +450,29 @@ function NotificationItem({
           
           {isUpsell && (
               <div className="mt-3">
-                  <button className="text-xs font-bold bg-accent/90 hover:bg-accent text-white px-4 py-2 rounded-lg w-full transition-colors">
+                  <button 
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          if (onUpgrade) onUpgrade();
+                      }}
+                      className="text-xs font-bold bg-accent/90 hover:bg-accent text-white px-4 py-2 rounded-lg w-full transition-colors"
+                  >
                       Upgrade to Pro
+                  </button>
+              </div>
+          )}
+
+          {isBlocked && (
+              <div className="mt-3">
+                  <button 
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          if (onUnlock) onUnlock();
+                      }}
+                      className="flex items-center justify-center gap-2 text-xs font-bold bg-[#1A2C22] hover:bg-[#23362b] border border-amber-500/30 text-amber-500 px-4 py-2 rounded-lg w-full transition-colors"
+                  >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                      Unlock Action
                   </button>
               </div>
           )}

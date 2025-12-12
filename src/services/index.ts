@@ -1,0 +1,11 @@
+export * from './whatsapp.service';
+export * from './telegram.service';
+export * from './email.service';
+export * from './calendar.service';
+export * from './notion.service';
+export { processVoiceIntent, classifyIntent, getIntentDisplayName } from './intent-classifier.service';
+export type { IntentType as LegacyIntentType, ParsedIntent } from './intent-classifier.service';
+export { AIEngineService } from './ai-engine.service';
+export type { IntentType, ActionType } from './ai-engine.service';
+export { PlanLimitsService } from './plan-limits.service';
+export type { PlanType } from './plan-limits.service';

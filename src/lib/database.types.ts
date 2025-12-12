@@ -122,6 +122,7 @@ export interface Notification {
   metadata: Record<string, unknown>;
   created_at: string;
   read_at: string | null;
+  scheduled_for?: string | null;
 }
 
 export interface Insight {
@@ -171,6 +172,9 @@ export interface UserPreferences {
   week_start: string;
   ai_opt_in: boolean;
   plan_tier: string;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  quiet_hours_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }

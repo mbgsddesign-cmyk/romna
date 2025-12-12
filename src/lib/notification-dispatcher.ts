@@ -13,7 +13,11 @@ type NotificationPayload = {
 type UserPreferences = {
   ai_opt_in: boolean;
   plan_tier: string;
-  // include other fields as necessary, but these are the critical ones for dispatch
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  quiet_hours_enabled?: boolean;
+  timezone?: string;
+  week_start?: string;
 };
 
 export class NotificationDispatcher {
@@ -29,14 +33,19 @@ export class NotificationDispatcher {
     if (!prefs) {
       const { data } = await this.supabase
         .from('user_preferences')
-        .select('ai_opt_in, plan_tier')
+        .select('ai_opt_in, plan_tier, quiet_hours_start, quiet_hours_end, quiet_hours_enabled, timezone, week_start')
         .eq('user_id', userId)
         .single();
       
       if (data) {
         prefs = {
             ai_opt_in: data.ai_opt_in ?? false,
-            plan_tier: data.plan_tier || 'free'
+            plan_tier: data.plan_tier || 'free',
+            quiet_hours_start: data.quiet_hours_start ?? undefined,
+            quiet_hours_end: data.quiet_hours_end ?? undefined,
+            quiet_hours_enabled: data.quiet_hours_enabled ?? undefined,
+            timezone: data.timezone ?? undefined,
+            week_start: data.week_start ?? undefined
         };
       } else {
         // Default to safe values if not found
@@ -96,7 +105,42 @@ export class NotificationDispatcher {
         }
     }
 
-    // 4. Delivery (Insert to DB)
+    // 4. Smart Timing & Quiet Hours
+    let scheduledFor = new Date();
+    let isDelayed = false;
+
+    if (prefs.quiet_hours_enabled && payload.priority !== 'high' && payload.priority !== 'urgent') {
+        try {
+            const timezone = prefs.timezone || 'UTC';
+            // Start checking from now
+            let checkTime = new Date(scheduledFor);
+            let attempts = 0;
+            // Limit checks to prevent infinite loops (e.g. 48 hours max)
+            const MAX_CHECKS = 48 * 4; // 15 min intervals
+
+            while (!this.isAllowedTime(checkTime, timezone, prefs) && attempts < MAX_CHECKS) {
+                // Advance 15 mins
+                checkTime = new Date(checkTime.getTime() + 15 * 60 * 1000);
+                attempts++;
+            }
+
+            if (attempts > 0 && attempts < MAX_CHECKS) {
+                scheduledFor = checkTime;
+                isDelayed = true;
+                await this.logActivity(userId, 'notification_delayed', {
+                    reason: 'quiet_hours',
+                    original_time: new Date().toISOString(),
+                    scheduled_for: scheduledFor.toISOString(),
+                    timezone
+                });
+            }
+        } catch (error) {
+            console.error('[NotificationDispatcher] Error calculating quiet hours:', error);
+            // Fallback: send immediately
+        }
+    }
+
+    // 5. Delivery (Insert to DB)
     const { error } = await this.supabase.from('notifications').insert({
       user_id: userId,
       type: 'ai',
@@ -107,6 +151,7 @@ export class NotificationDispatcher {
       ai_reason: payload.ai_reason,
       is_read: false,
       is_batched: false,
+      scheduled_for: scheduledFor.toISOString(),
       metadata: payload.metadata
     });
 
@@ -115,19 +160,61 @@ export class NotificationDispatcher {
         return { success: false, reason: 'db_insert_error' };
     }
 
-    return { success: true };
+    return { success: true, reason: isDelayed ? 'scheduled_for_later' : undefined };
+  }
+
+  private isAllowedTime(date: Date, timezone: string, prefs: UserPreferences): boolean {
+      if (!prefs.quiet_hours_start || !prefs.quiet_hours_end) return true;
+
+      try {
+          const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              hour: 'numeric',
+              minute: 'numeric',
+              hour12: false
+          });
+          const parts = formatter.formatToParts(date);
+          const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+          const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+          const currentMins = h * 60 + m;
+
+          const [sH, sM] = prefs.quiet_hours_start.split(':').map(Number);
+          const startMins = sH * 60 + sM;
+
+          const [eH, eM] = prefs.quiet_hours_end.split(':').map(Number);
+          const endMins = eH * 60 + eM;
+
+          if (startMins > endMins) {
+              // Overnight (e.g. 22:00 to 08:00)
+              // Quiet if > 22:00 OR < 08:00
+              // Allowed if BETWEEN 08:00 and 22:00
+              return currentMins >= endMins && currentMins < startMins;
+          } else {
+              // Daytime block (e.g. 14:00 to 16:00)
+              // Quiet if > 14:00 AND < 16:00
+              // Allowed if < 14:00 OR > 16:00
+              return currentMins < startMins || currentMins >= endMins;
+          }
+      } catch (e) {
+          console.warn('[NotificationDispatcher] Date parsing error', e);
+          return true; // Fail open
+      }
   }
 
   private async logSkip(userId: string, payload: NotificationPayload, reason: string) {
+      await this.logActivity(userId, 'notification_skipped', {
+          reason,
+          title: payload.title,
+          priority: payload.priority,
+          tier_restriction: true
+      });
+  }
+
+  private async logActivity(userId: string, action: string, meta: any) {
       await this.supabase.from('user_activity').insert({
           user_id: userId,
-          action: 'notification_skipped',
-          meta: {
-              reason,
-              title: payload.title,
-              priority: payload.priority,
-              tier_restriction: true
-          }
+          action,
+          meta
       });
   }
 }

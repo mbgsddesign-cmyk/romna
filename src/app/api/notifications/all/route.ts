@@ -34,6 +34,9 @@ export async function GET(req: NextRequest) {
       query = query.eq('category', category);
     }
 
+    // Only fetch notifications that are scheduled for now or in the past
+    query = query.lte('scheduled_for', new Date().toISOString());
+
     const { data: notifications, error } = await query;
 
     if (error) {

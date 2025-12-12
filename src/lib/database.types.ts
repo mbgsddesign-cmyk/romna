@@ -3,6 +3,11 @@ export type UserStatus = 'active' | 'banned' | 'suspended';
 export type SubscriptionPlan = 'free' | 'pro' | 'enterprise';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'trial';
 export type IntegrationType = 'whatsapp' | 'telegram' | 'gmail' | 'notion' | 'google_calendar';
+export type NotificationCategory = 'insights' | 'ai' | 'reminders' | 'general';
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type FocusMode = 'deep_work' | 'light_focus' | 'break' | 'meeting';
+export type FocusStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+export type InsightType = 'productivity' | 'energy' | 'patterns' | 'suggestions';
 
 export interface Profile {
   id: string;
@@ -99,6 +104,52 @@ export interface VoiceIntent {
   success: boolean;
   error_message: string | null;
   created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  priority: NotificationPriority;
+  is_read: boolean;
+  is_batched: boolean;
+  action_url: string | null;
+  action_label: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface Insight {
+  id: string;
+  user_id: string;
+  type: InsightType;
+  title: string;
+  description: string;
+  insight_data: Record<string, unknown>;
+  period_start: string;
+  period_end: string;
+  created_at: string;
+}
+
+export interface FocusSession {
+  id: string;
+  user_id: string;
+  title: string;
+  mode: FocusMode;
+  start_time: string;
+  end_time: string | null;
+  target_duration: number | null;
+  actual_duration: number | null;
+  status: FocusStatus;
+  interruptions: number;
+  music_playlist: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProfileWithSubscription extends Profile {

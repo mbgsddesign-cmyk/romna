@@ -5,3 +5,4 @@ export { PriorityBadge } from './priority-badge';
 export { SectionHeader } from './section-header';
 export { EmptyState } from './empty-state';
 export { RomnaInput } from './romna-input';
+export { FocusLockScreen } from './focus-lock-screen';

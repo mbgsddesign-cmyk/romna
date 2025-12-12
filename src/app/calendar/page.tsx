@@ -4,7 +4,7 @@ import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { useAppStore, Event as AppEvent } from '@/lib/store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, MapPin, Trash2, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, MapPin, Trash2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sparkles, Zap } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -23,6 +23,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { SectionHeader, EmptyState } from '@/components/romna';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 function CalendarContent() {
   const { t } = useTranslation();
@@ -86,6 +87,31 @@ function CalendarContent() {
               <TabsTrigger value="weekly" className="rounded-[12px] data-[state=active]:bg-card data-[state=active]:shadow-sm">{t('weekly')}</TabsTrigger>
             </TabsList>
           </Tabs>
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="mb-4">
+          <Card className="p-4 bg-gradient-to-br from-primary/5 via-accent/5 to-transparent border-accent/20">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-[14px] font-bold">AI Morning Insight</h3>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-accent/30 text-accent">
+                    PRO
+                  </Badge>
+                </div>
+                <p className="text-[13px] text-muted-foreground leading-relaxed mb-3">
+                  Your energy peaks at 10 AM today. Schedule important meetings then.
+                </p>
+                <Button size="sm" variant="outline" className="h-8 text-[12px]">
+                  <Zap className="w-3 h-3 mr-1" />
+                  Add Focus Time
+                </Button>
+              </div>
+            </div>
+          </Card>
         </motion.div>
 
         <motion.section variants={itemVariants} className="mb-4">

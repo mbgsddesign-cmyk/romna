@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, CheckSquare, Calendar, Mic, Settings, Shield } from 'lucide-react';
+import { Home, CheckSquare, Calendar, Mic, Settings, Shield, Bell, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from '@/hooks/use-translation';

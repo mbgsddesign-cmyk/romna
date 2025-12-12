@@ -88,7 +88,7 @@ export default function HomePage() {
                 {t('appName')}
               </h1>
               <p className="text-accent text-[14px] mt-0.5 font-medium">
-                {locale === 'ar' ? 'مساعدك الذكي اليومي' : 'Your Daily AI Assistant'}
+                {t('yourDailyAIAssistant')}
               </p>
             </div>
             <Link href="/notifications">
@@ -120,7 +120,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-accent" />
-              {locale === 'ar' ? 'رؤى ذكية' : 'AI Insights'}
+              {t('aiInsights')}
             </h2>
             <Link href="/insights">
               <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
@@ -139,14 +139,14 @@ export default function HomePage() {
           ) : insights.length > 0 ? (
             <div className="space-y-3">
               {insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} locale={locale} />
+                <InsightCard key={insight.id} insight={insight} locale={locale} t={t} />
               ))}
             </div>
           ) : (
             <div className="glass-card p-8 text-center">
               <Brain className="w-12 h-12 text-accent/50 mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">
-                {locale === 'ar' ? 'لا توجد رؤى جديدة اليوم' : 'No new insights today'}
+                {t('noNewInsightsToday')}
               </p>
             </div>
           )}
@@ -154,33 +154,33 @@ export default function HomePage() {
 
         <motion.section variants={itemVariants} className="mb-6">
           <h2 className="text-[18px] font-bold mb-4">
-            {locale === 'ar' ? 'التركيز والإنتاجية' : 'Focus & Productivity'}
+            {t('focusProductivity')}
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <FocusCard
               icon={Target}
-              title={locale === 'ar' ? 'مهام اليوم' : "Today's Tasks"}
+              title={t('todaysTasksLabel')}
               value="3"
               color="primary"
               href="/tasks"
             />
             <FocusCard
               icon={Calendar}
-              title={locale === 'ar' ? 'أحداث اليوم' : "Today's Events"}
+              title={t('todaysEventsLabel')}
               value="2"
               color="accent"
               href="/calendar"
             />
             <FocusCard
               icon={TrendingUp}
-              title={locale === 'ar' ? 'معدل الإنجاز' : 'Completion Rate'}
+              title={t('completionRate')}
               value="87%"
               color="success"
               href="/insights"
             />
             <FocusCard
               icon={Zap}
-              title={locale === 'ar' ? 'نقاط النشاط' : 'Activity Score'}
+              title={t('activityScore')}
               value="94"
               color="gold"
               href="/insights"
@@ -191,7 +191,7 @@ export default function HomePage() {
         {notifications.length > 0 && (
           <motion.section variants={itemVariants} className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[18px] font-bold">{locale === 'ar' ? 'الإشعارات' : 'Notifications'}</h2>
+              <h2 className="text-[18px] font-bold">{t('notifications')}</h2>
               <Link href="/notifications">
                 <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
               </Link>
@@ -207,9 +207,9 @@ export default function HomePage() {
         <motion.section variants={itemVariants} className="mb-8">
           <h2 className="text-[18px] font-bold mb-4">{t('quickActions')}</h2>
           <div className="grid grid-cols-3 gap-3">
-            <QuickActionCard href="/voice" icon={MessageSquare} label={locale === 'ar' ? 'مهمة صوتية' : 'Voice Task'} />
-            <QuickActionCard href="/calendar?action=new" icon={Calendar} label={locale === 'ar' ? 'حدث جديد' : 'New Event'} />
-            <QuickActionCard href="/settings/integrations" icon={Mail} label={locale === 'ar' ? 'الربط' : 'Connect'} />
+            <QuickActionCard href="/voice" icon={MessageSquare} label={t('voiceTaskLabel')} />
+            <QuickActionCard href="/calendar?action=new" icon={Calendar} label={t('newEventLabel')} />
+            <QuickActionCard href="/settings/integrations" icon={Mail} label={t('connectLabel')} />
           </div>
         </motion.section>
       </motion.div>
@@ -217,7 +217,7 @@ export default function HomePage() {
   );
 }
 
-function InsightCard({ insight, locale }: { insight: Insight; locale: string }) {
+function InsightCard({ insight, locale, t }: { insight: Insight; locale: string; t: (key: string) => string }) {
   const getIcon = () => {
     switch (insight.category) {
       case 'productivity': return TrendingUp;
@@ -249,7 +249,7 @@ function InsightCard({ insight, locale }: { insight: Insight; locale: string }) 
               <h3 className="text-[15px] font-semibold text-foreground line-clamp-1">{insight.title}</h3>
               {insight.priority === 'high' && (
                 <Badge className="bg-accent/20 text-accent text-[11px] h-5 border-0">
-                  {locale === 'ar' ? 'مهم' : 'High'}
+                  {t('high')}
                 </Badge>
               )}
             </div>

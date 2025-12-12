@@ -155,33 +155,96 @@ export async function POST(request: NextRequest) {
         const taskStatus = pollData.output?.task_status;
         
         console.log(`[Fun-ASR] Poll attempt ${attempts + 1}: ${taskStatus}`);
-        console.log(`[Fun-ASR] Full poll response:`, JSON.stringify(pollData, null, 2));
         
         if (taskStatus === 'SUCCEEDED') {
-          // Extract transcript - try multiple possible formats
-          // Format 1: output.results[0].transcription.text
-          // Format 2: output.result.text
-          // Format 3: output.text
+          // 🔍 CRITICAL: Log FULL response structure for debugging
+          console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData.output:');
+          console.log(JSON.stringify(pollData.output, null, 2));
+          console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData (entire JSON):');
+          console.log(JSON.stringify(pollData, null, 2));
+          
+          // Track all paths checked for debugging
+          const pathsChecked: string[] = [];
           const output = pollData.output || {};
           
-          if (output.results && output.results.length > 0) {
+          // PATH 1: output.results[0].transcription.text
+          if (output.results && Array.isArray(output.results) && output.results.length > 0) {
             const result = output.results[0];
+            pathsChecked.push('output.results[0].transcription.text');
             if (result.transcription?.text) {
               transcript = result.transcription.text;
-            } else if (result.text) {
+            }
+            
+            // PATH 2: output.results[0].text
+            if (!transcript && result.text) {
+              pathsChecked.push('output.results[0].text');
               transcript = result.text;
-            } else if (result.transcript) {
+            }
+            
+            // PATH 3: output.results[0].transcript
+            if (!transcript && result.transcript) {
+              pathsChecked.push('output.results[0].transcript');
               transcript = result.transcript;
             }
-          } else if (output.result?.text) {
-            transcript = output.result.text;
-          } else if (output.text) {
-            transcript = output.text;
-          } else if (output.transcription) {
-            transcript = output.transcription;
+            
+            // PATH 4: Join all result.sentences (if segmented)
+            if (!transcript && result.sentences && Array.isArray(result.sentences)) {
+              pathsChecked.push('output.results[0].sentences[] (joined)');
+              transcript = result.sentences.map((s: any) => s.text || '').join(' ').trim();
+            }
           }
           
+          // PATH 5: output.result.text
+          if (!transcript && output.result?.text) {
+            pathsChecked.push('output.result.text');
+            transcript = output.result.text;
+          }
+          
+          // PATH 6: output.text
+          if (!transcript && output.text) {
+            pathsChecked.push('output.text');
+            transcript = output.text;
+          }
+          
+          // PATH 7: output.transcription
+          if (!transcript && output.transcription) {
+            pathsChecked.push('output.transcription');
+            transcript = typeof output.transcription === 'string' 
+              ? output.transcription 
+              : output.transcription.text || '';
+          }
+          
+          // PATH 8: output.url (download transcript file - fallback)
+          if (!transcript && output.url) {
+            pathsChecked.push('output.url (transcript file)');
+            // Note: Would require fetching the URL, skipping for now
+          }
+          
+          console.log('[Fun-ASR] Paths checked:', pathsChecked);
           console.log('[Fun-ASR] Extracted transcript:', transcript);
+          
+          // 🚨 UNIT-SAFE GUARD: If SUCCEEDED but no transcript found, return debug error
+          if (!transcript || transcript.trim() === '') {
+            console.error('[Fun-ASR] ❌ SUCCEEDED but transcript field not found!');
+            console.error('[Fun-ASR] Available keys in output:', Object.keys(output));
+            
+            // Cleanup before returning error
+            if (tempFilePath) {
+              await supabase.storage.from('voice-temp').remove([tempFilePath]);
+            }
+            
+            return NextResponse.json(
+              { 
+                error: 'SUCCEEDED but transcript field not found',
+                debug_paths_checked: pathsChecked,
+                debug_output_keys: Object.keys(output),
+                debug_full_output: output,
+                hint: 'Check server logs for full JSON structure'
+              },
+              { status: 500 }
+            );
+          }
+          
           break;
         } else if (taskStatus === 'FAILED') {
           console.error('[Fun-ASR] Task failed:', JSON.stringify(pollData, null, 2));

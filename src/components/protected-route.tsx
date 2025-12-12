@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
@@ -63,6 +63,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isChecking, setIsChecking] = useState(true);
+  const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
   const isAdminRoute = pathname.startsWith('/admin');
@@ -77,7 +78,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       }
 
       if (user && !profile && !isPublicRoute) {
+        if (!profileTimeoutRef.current) {
+          profileTimeoutRef.current = setTimeout(() => {
+            console.warn('Profile loading timeout - allowing UI render');
+            setIsChecking(false);
+          }, 3000);
+        }
         return;
+      }
+
+      if (profileTimeoutRef.current) {
+        clearTimeout(profileTimeoutRef.current);
+        profileTimeoutRef.current = null;
       }
 
       if (user && profile && !profile.onboarding_completed && pathname !== '/onboarding') {
@@ -99,6 +111,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     };
 
     checkAuth();
+
+    return () => {
+      if (profileTimeoutRef.current) {
+        clearTimeout(profileTimeoutRef.current);
+      }
+    };
   }, [loading, user, profile, isPublicRoute, isAdminRoute, isAdmin, pathname, router]);
 
   if (loading || (isChecking && !isPublicRoute)) {
@@ -111,14 +129,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!user && !isPublicRoute) {
     return null;
-  }
-
-  if (user && !profile && !isPublicRoute) {
-    return (
-      <AnimatePresence mode="wait">
-        <LoadingScreen key="profile-loading" />
-      </AnimatePresence>
-    );
   }
 
   if (isAdminRoute && !isAdmin) {

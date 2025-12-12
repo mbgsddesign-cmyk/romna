@@ -247,6 +247,8 @@ export default function NotificationsPage() {
                   icon={getIconForCategory(n.category, n.priority)}
                   isUnread={true}
                   onClick={() => handleMarkRead(n.id)}
+                  category={n.category}
+                  metadata={n.metadata as any}
                 />
               ))
             )}
@@ -292,6 +294,8 @@ export default function NotificationsPage() {
                   icon={getIconForCategory(n.category, n.priority)}
                   isUnread={false}
                   onClick={() => {}}
+                  category={n.category}
+                  metadata={n.metadata as any}
                 />
               ))
             )}
@@ -320,7 +324,9 @@ function NotificationItem({
   time, 
   icon: Icon, 
   isUnread, 
-  onClick
+  onClick,
+  category,
+  metadata
 }: { 
   title: string; 
   message: string; 
@@ -328,7 +334,12 @@ function NotificationItem({
   icon: React.ElementType; 
   isUnread: boolean; 
   onClick?: () => void;
+  category?: string;
+  metadata?: { pro_eligible?: boolean; reason?: string };
 }) {
+  const isUpsell = category === 'upgrade';
+  const isProEligible = metadata?.pro_eligible === true;
+
   return (
     <div 
       onClick={onClick}
@@ -338,6 +349,7 @@ function NotificationItem({
     >
       <div className={cn(
         "relative flex items-start gap-4 p-5 rounded-2xl shadow-lg transition-transform active:scale-[0.98]",
+        isUpsell ? "bg-gradient-to-br from-[#1A2C22] to-[#2C1A22] border border-accent/30" :
         isUnread 
           ? "bg-[#23362b] border-l-4 border-[#30e87a]" 
           : "bg-[#1A2C22] border border-white/5"
@@ -345,24 +357,34 @@ function NotificationItem({
         <div className="relative">
           <div className={cn(
             "flex items-center justify-center rounded-xl size-12 shrink-0",
+            isUpsell ? "bg-accent/20 text-accent" :
             isUnread ? "bg-[#30e87a]/20 text-[#30e87a]" : "bg-[#23362b] text-[#9db8a8]"
           )}>
             <Icon className="w-6 h-6" />
           </div>
-          {isUnread && (
+          {isUnread && !isUpsell && (
             <div className="absolute -top-1 -right-1 size-3 bg-[#30e87a] rounded-full border-2 border-[#23362b]"></div>
           )}
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
           <div className="flex justify-between items-start mb-0.5">
-            <p className={cn(
-              "text-base leading-tight truncate pr-2",
-              isUnread ? "text-white font-semibold" : "text-white/80 font-medium"
-            )}>
-              {title}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={cn(
+                "text-base leading-tight truncate pr-2",
+                isUpsell ? "text-white font-bold" :
+                isUnread ? "text-white font-semibold" : "text-white/80 font-medium"
+              )}>
+                {title}
+              </p>
+              {isProEligible && !isUpsell && (
+                 <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider border border-accent/20">
+                   Pro Insight
+                 </span>
+              )}
+            </div>
             <span className={cn(
               "text-xs font-medium whitespace-nowrap",
+              isUpsell ? "text-accent" :
               isUnread ? "text-[#30e87a]" : "text-white/30"
             )}>
               {time}
@@ -370,10 +392,19 @@ function NotificationItem({
           </div>
           <p className={cn(
             "text-sm font-normal leading-relaxed line-clamp-2",
+            isUpsell ? "text-white/90" :
             isUnread ? "text-[#9db8a8]" : "text-white/40"
           )}>
             {message}
           </p>
+          
+          {isUpsell && (
+              <div className="mt-3">
+                  <button className="text-xs font-bold bg-accent/90 hover:bg-accent text-white px-4 py-2 rounded-lg w-full transition-colors">
+                      Upgrade to Pro
+                  </button>
+              </div>
+          )}
         </div>
       </div>
     </div>

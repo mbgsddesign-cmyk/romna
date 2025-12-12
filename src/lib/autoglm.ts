@@ -169,7 +169,8 @@ Notification Payload
   "title": "...",
   "body": "...",
   "priority": 1,
-  "ai_reason": "optional for Pro users"
+  "ai_reason": "optional for Pro users",
+  "pro_eligible": false
 }
 
 
@@ -195,6 +196,13 @@ MEMORY & DUPLICATION CONTROL
 Before generating:
 	•	Check ai_sessions.context_hash
 	•	If similar context exists in last 24h → SKIP
+
+Pro Eligibility Signal
+Set "pro_eligible": true IF:
+	•	Insight involves multi-step reasoning
+	•	It detects a complex conflict
+	•	It offers a predictive suggestion
+	•	It's a "High-impact" moment (Aha moment)
 
 After generation:
 	•	Log session with:
@@ -380,7 +388,10 @@ export class AutoGLM {
             priority: result.notification.priority === 1 ? 'high' : 'normal',
             ai_reason: result.notification.ai_reason,
             category: 'ai',
-            metadata: { trigger }
+            metadata: { 
+              trigger,
+              pro_eligible: result.notification.pro_eligible || false 
+            }
           },
           userPrefs
         );

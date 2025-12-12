@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase';
 
 interface Entitlements {
   isPro: boolean;
@@ -34,7 +34,6 @@ const PRO_ENTITLEMENTS: Entitlements = {
 export function useEntitlements() {
   const [entitlements, setEntitlements] = useState<Entitlements>(FREE_ENTITLEMENTS);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
 
   useEffect(() => {
     fetchEntitlements();

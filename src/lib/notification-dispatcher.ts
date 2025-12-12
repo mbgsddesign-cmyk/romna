@@ -100,6 +100,43 @@ export class NotificationDispatcher {
         }
 
         if (count !== null && count >= 2) {
+             console.log(`[NotificationDispatcher] Daily limit reached for user ${userId}`);
+             
+             // UPSELL LOGIC: Check if we should show an upsell instead
+             // Only show upsell once per 24h
+             const upsellLookback = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+             const { data: recentUpsells } = await this.supabase
+                .from('user_activity')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('action', 'upsell_impression')
+                .gte('created_at', upsellLookback)
+                .limit(1);
+
+             if (!recentUpsells || recentUpsells.length === 0) {
+                 // Create Upsell Notification
+                 console.log(`[NotificationDispatcher] triggering upsell for user ${userId}`);
+                 await this.supabase.from('notifications').insert({
+                    user_id: userId,
+                    type: 'system',
+                    title: 'Daily Limit Reached',
+                    message: 'You have reached your daily AI notification limit. Upgrade to Pro for unlimited insights.',
+                    category: 'upgrade',
+                    priority: 'high', // High priority to ensure delivery
+                    is_read: false,
+                    is_batched: false,
+                    metadata: { 
+                        reason: 'daily_limit',
+                        original_payload: {
+                            title: payload.title,
+                            category: payload.category
+                        }
+                    }
+                 });
+
+                 await this.logActivity(userId, 'upsell_impression', { reason: 'daily_limit' });
+             }
+
              await this.logSkip(userId, payload, 'daily_limit_reached');
              return { success: false, skipped: true, reason: 'daily_limit_reached' };
         }

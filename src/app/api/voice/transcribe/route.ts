@@ -155,15 +155,36 @@ export async function POST(request: NextRequest) {
         const taskStatus = pollData.output?.task_status;
         
         console.log(`[Fun-ASR] Poll attempt ${attempts + 1}: ${taskStatus}`);
+        console.log(`[Fun-ASR] Full poll response:`, JSON.stringify(pollData, null, 2));
         
         if (taskStatus === 'SUCCEEDED') {
-          // Extract transcript
-          const results = pollData.output?.results || [];
-          if (results.length > 0 && results[0].transcription) {
-            transcript = results[0].transcription.text || '';
+          // Extract transcript - try multiple possible formats
+          // Format 1: output.results[0].transcription.text
+          // Format 2: output.result.text
+          // Format 3: output.text
+          const output = pollData.output || {};
+          
+          if (output.results && output.results.length > 0) {
+            const result = output.results[0];
+            if (result.transcription?.text) {
+              transcript = result.transcription.text;
+            } else if (result.text) {
+              transcript = result.text;
+            } else if (result.transcript) {
+              transcript = result.transcript;
+            }
+          } else if (output.result?.text) {
+            transcript = output.result.text;
+          } else if (output.text) {
+            transcript = output.text;
+          } else if (output.transcription) {
+            transcript = output.transcription;
           }
+          
+          console.log('[Fun-ASR] Extracted transcript:', transcript);
           break;
         } else if (taskStatus === 'FAILED') {
+          console.error('[Fun-ASR] Task failed:', JSON.stringify(pollData, null, 2));
           throw new Error('Fun-ASR transcription task failed');
         }
       }

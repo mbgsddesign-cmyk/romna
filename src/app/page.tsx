@@ -5,7 +5,6 @@ import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
 import { Sparkles, TrendingUp, Target, Zap, Bell, BellDot, Brain, Lightbulb, Calendar, Mail, MessageSquare, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -85,10 +84,10 @@ export default function HomePage() {
         <motion.header variants={itemVariants} className="pt-8 pb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-[28px] font-extrabold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              <h1 className="text-[28px] font-extrabold tracking-tight text-foreground">
                 {t('appName')}
               </h1>
-              <p className="text-muted-foreground text-[14px] mt-0.5">
+              <p className="text-accent text-[14px] mt-0.5 font-medium">
                 {locale === 'ar' ? 'مساعدك الذكي اليومي' : 'Your Daily AI Assistant'}
               </p>
             </div>
@@ -98,8 +97,8 @@ export default function HomePage() {
                 className="relative"
               >
                 <div className={cn(
-                  "w-12 h-12 rounded-[16px] flex items-center justify-center transition-colors",
-                  unreadCount > 0 ? "bg-accent/10" : "bg-muted"
+                  "w-12 h-12 rounded-[18px] flex items-center justify-center transition-all glass-card",
+                  unreadCount > 0 && "neon-glow"
                 )}>
                   {unreadCount > 0 ? (
                     <BellDot className="w-5 h-5 text-accent" />
@@ -108,8 +107,8 @@ export default function HomePage() {
                   )}
                 </div>
                 {unreadCount > 0 && (
-                  <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-white">{unreadCount}</span>
+                  <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-accent flex items-center justify-center neon-glow">
+                    <span className="text-[11px] font-bold text-background">{unreadCount}</span>
                   </div>
                 )}
               </motion.div>
@@ -118,20 +117,23 @@ export default function HomePage() {
         </motion.header>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[16px] font-bold">{locale === 'ar' ? 'رؤى ذكية' : 'AI Insights'}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[18px] font-bold flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-accent" />
+              {locale === 'ar' ? 'رؤى ذكية' : 'AI Insights'}
+            </h2>
             <Link href="/insights">
-              <span className="text-[13px] text-accent font-medium">{t('viewAll')}</span>
+              <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
             </Link>
           </div>
 
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Card key={i} className="p-4 animate-pulse">
-                  <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                  <div className="h-3 bg-muted rounded w-full" />
-                </Card>
+                <div key={i} className="glass-card p-5 animate-pulse">
+                  <div className="h-4 bg-muted/30 rounded w-3/4 mb-3" />
+                  <div className="h-3 bg-muted/20 rounded w-full" />
+                </div>
               ))}
             </div>
           ) : insights.length > 0 ? (
@@ -141,17 +143,17 @@ export default function HomePage() {
               ))}
             </div>
           ) : (
-            <Card className="p-6 text-center">
-              <Brain className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+            <div className="glass-card p-8 text-center">
+              <Brain className="w-12 h-12 text-accent/50 mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">
                 {locale === 'ar' ? 'لا توجد رؤى جديدة اليوم' : 'No new insights today'}
               </p>
-            </Card>
+            </div>
           )}
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[16px] font-bold mb-3">
+          <h2 className="text-[18px] font-bold mb-4">
             {locale === 'ar' ? 'التركيز والإنتاجية' : 'Focus & Productivity'}
           </h2>
           <div className="grid grid-cols-2 gap-3">
@@ -188,13 +190,13 @@ export default function HomePage() {
 
         {notifications.length > 0 && (
           <motion.section variants={itemVariants} className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[16px] font-bold">{locale === 'ar' ? 'الإشعارات' : 'Notifications'}</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[18px] font-bold">{locale === 'ar' ? 'الإشعارات' : 'Notifications'}</h2>
               <Link href="/notifications">
-                <span className="text-[13px] text-accent font-medium">{t('viewAll')}</span>
+                <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
               </Link>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {notifications.map((notification) => (
                 <NotificationCard key={notification.id} notification={notification} locale={locale} />
               ))}
@@ -203,7 +205,7 @@ export default function HomePage() {
         )}
 
         <motion.section variants={itemVariants} className="mb-8">
-          <h2 className="text-[16px] font-bold mb-3">{t('quickActions')}</h2>
+          <h2 className="text-[18px] font-bold mb-4">{t('quickActions')}</h2>
           <div className="grid grid-cols-3 gap-3">
             <QuickActionCard href="/voice" icon={MessageSquare} label={locale === 'ar' ? 'مهمة صوتية' : 'Voice Task'} />
             <QuickActionCard href="/calendar?action=new" icon={Calendar} label={locale === 'ar' ? 'حدث جديد' : 'New Event'} />
@@ -229,30 +231,32 @@ function InsightCard({ insight, locale }: { insight: Insight; locale: string }) 
 
   return (
     <Link href="/insights">
-      <Card className="p-4 hover:shadow-md transition-all duration-200 border-border/50 hover:border-accent/30">
-        <div className="flex items-start gap-3">
+      <div className="glass-card-hover glass-card p-5 cursor-pointer">
+        <div className="flex items-start gap-4">
           <div className={cn(
-            "w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0",
-            insight.priority === 'high' || insight.priority === 'urgent' ? "bg-accent/10" : "bg-primary/10"
+            "w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0",
+            insight.priority === 'high' || insight.priority === 'urgent' 
+              ? "bg-accent/20 neon-glow" 
+              : "bg-primary/20"
           )}>
             <Icon className={cn(
-              "w-5 h-5",
+              "w-6 h-6",
               insight.priority === 'high' || insight.priority === 'urgent' ? "text-accent" : "text-primary"
             )} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-[14px] font-semibold line-clamp-1">{insight.title}</h3>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-[15px] font-semibold text-foreground line-clamp-1">{insight.title}</h3>
               {insight.priority === 'high' && (
-                <Badge className="bg-accent/10 text-accent text-[10px] h-5">
+                <Badge className="bg-accent/20 text-accent text-[11px] h-5 border-0">
                   {locale === 'ar' ? 'مهم' : 'High'}
                 </Badge>
               )}
             </div>
-            <p className="text-[13px] text-muted-foreground line-clamp-2">{insight.content}</p>
+            <p className="text-[13px] text-muted-foreground line-clamp-2 leading-relaxed">{insight.content}</p>
           </div>
         </div>
-      </Card>
+      </div>
     </Link>
   );
 }
@@ -271,22 +275,22 @@ function FocusCard({
   href: string;
 }) {
   const colorClasses = {
-    primary: 'bg-primary/10 text-primary',
-    accent: 'bg-accent/10 text-accent',
-    success: 'bg-green-500/10 text-green-600 dark:text-green-500',
-    gold: 'bg-[#F3C96B]/15 text-[#C9A550] dark:text-[#F3C96B]',
+    primary: 'bg-primary/20 text-primary',
+    accent: 'bg-accent/20 text-accent neon-glow',
+    success: 'bg-green-500/20 text-green-400',
+    gold: 'bg-[#F3C96B]/20 text-[#F3C96B]',
   };
 
   return (
     <Link href={href}>
-      <motion.div whileTap={{ scale: 0.95 }}>
-        <Card className="p-4 hover:shadow-md transition-all duration-200">
-          <div className={cn("w-10 h-10 rounded-[14px] flex items-center justify-center mb-3", colorClasses[color])}>
-            <Icon className="w-5 h-5" />
+      <motion.div whileTap={{ scale: 0.97 }}>
+        <div className="glass-card-hover glass-card p-5 cursor-pointer">
+          <div className={cn("w-12 h-12 rounded-[16px] flex items-center justify-center mb-4", colorClasses[color])}>
+            <Icon className="w-6 h-6" />
           </div>
-          <p className="text-[12px] text-muted-foreground mb-1">{title}</p>
-          <p className="text-[20px] font-bold">{value}</p>
-        </Card>
+          <p className="text-[13px] text-muted-foreground mb-2">{title}</p>
+          <p className="text-[24px] font-bold text-foreground">{value}</p>
+        </div>
       </motion.div>
     </Link>
   );
@@ -302,25 +306,29 @@ function NotificationCard({ notification, locale }: { notification: Notification
     }
   };
 
+  const priorityClass = notification.priority === 'urgent' ? 'priority-urgent' : 
+                        notification.priority === 'high' ? 'priority-high' : 'priority-normal';
+
   return (
     <Link href="/notifications">
-      <Card className={cn(
-        "p-3 hover:shadow-sm transition-all duration-200",
-        !notification.is_read && "bg-accent/5 border-accent/20"
+      <div className={cn(
+        "notification-card cursor-pointer transition-all hover:scale-[1.02]",
+        priorityClass,
+        !notification.is_read && "bg-accent/5"
       )}>
         <div className="flex items-start gap-3">
-          <div className={cn("mt-0.5", getPriorityColor())}>
-            <AlertCircle className="w-4 h-4" />
+          <div className={cn("mt-1", getPriorityColor())}>
+            <AlertCircle className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-[13px] font-medium line-clamp-1 mb-0.5">{notification.title}</h4>
-            <p className="text-[12px] text-muted-foreground line-clamp-1">{notification.message}</p>
+            <h4 className="text-[14px] font-semibold text-foreground line-clamp-1 mb-1">{notification.title}</h4>
+            <p className="text-[13px] text-muted-foreground line-clamp-2 leading-relaxed">{notification.message}</p>
           </div>
           {!notification.is_read && (
-            <div className="w-2 h-2 rounded-full bg-accent shrink-0 mt-2" />
+            <div className="w-2.5 h-2.5 rounded-full bg-accent shrink-0 mt-2 neon-glow" />
           )}
         </div>
-      </Card>
+      </div>
     </Link>
   );
 }
@@ -330,12 +338,12 @@ function QuickActionCard({ href, icon: Icon, label }: { href: string; icon: Reac
     <Link href={href}>
       <motion.div
         whileTap={{ scale: 0.95 }}
-        className="mobile-card flex flex-col items-center gap-2 p-4 hover:shadow-md transition-all duration-200"
+        className="glass-card-hover glass-card flex flex-col items-center gap-3 p-5 cursor-pointer"
       >
-        <div className="p-2.5 rounded-[14px] bg-primary/10">
-          <Icon className="w-5 h-5 text-primary" />
+        <div className="p-3 rounded-[16px] bg-accent/20 neon-glow">
+          <Icon className="w-6 h-6 text-accent" />
         </div>
-        <span className="text-[11px] font-medium text-center leading-tight">{label}</span>
+        <span className="text-[12px] font-semibold text-center leading-tight text-foreground">{label}</span>
       </motion.div>
     </Link>
   );

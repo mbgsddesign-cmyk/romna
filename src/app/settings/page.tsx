@@ -128,37 +128,32 @@ export default function SettingsPage() {
         animate="visible"
       >
         <motion.header variants={itemVariants} className="pt-6 pb-6">
-          <h1 className="text-2xl font-extrabold">{t('settings')}</h1>
+          <h1 className="text-[32px] font-extrabold text-foreground">{t('settings')}</h1>
         </motion.header>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title="Account" />
-          <Card className="p-0 overflow-hidden divide-y divide-border">
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Account</h2>
+          <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-[18px] bg-gradient-to-br from-primary to-accent flex items-center justify-center neon-glow">
                   <span className="text-xl font-bold text-white">
                     {profile?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
                   </span>
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold text-base">{profile?.name || 'User'}</h3>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="font-semibold text-[16px] text-foreground">{profile?.name || 'User'}</h3>
                     {isAdmin && (
-                      <Badge className="bg-primary/10 text-primary text-xs">
+                      <Badge className="bg-primary/20 text-primary text-[11px] border-0">
                         <Shield className="w-3 h-3 mr-1" />
                         {t('admin')}
                       </Badge>
                     )}
-                    {!isAdmin && profile?.role === 'USER' && (
-                      <Badge variant="outline" className="text-xs">
-                        {t('user')}
-                      </Badge>
-                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">{user?.email}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge className={cn("text-xs", getPlanBadgeColor(profile?.subscription?.plan))}>
+                  <p className="text-[14px] text-muted-foreground">{user?.email}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge className={cn("text-[11px] border-0 neon-glow", getPlanBadgeColor(profile?.subscription?.plan))}>
                       <PlanIcon className="w-3 h-3 mr-1" />
                       {(profile?.subscription?.plan || 'free').toUpperCase()} {t('plan')}
                     </Badge>
@@ -168,10 +163,10 @@ export default function SettingsPage() {
             </div>
 
             {profile?.usageTracking && profile?.planLimits && (
-              <div className="p-4 space-y-3">
-                <div className="flex items-center justify-between text-sm">
+              <div className="p-5 space-y-3">
+                <div className="flex items-center justify-between text-[13px]">
                   <span className="text-muted-foreground">AI Tokens</span>
-                  <span className="font-medium">
+                  <span className="font-semibold text-foreground">
                     {profile.usageTracking.ai_tokens_used.toLocaleString()} / {profile.planLimits.monthly_ai_tokens === -1 ? '∞' : profile.planLimits.monthly_ai_tokens.toLocaleString()}
                   </span>
                 </div>
@@ -180,7 +175,7 @@ export default function SettingsPage() {
                   className="h-2"
                 />
                 {profile.subscription?.current_period_end && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[12px] text-accent">
                     Resets: {new Date(profile.subscription.current_period_end).toLocaleDateString()}
                   </p>
                 )}
@@ -191,7 +186,7 @@ export default function SettingsPage() {
               <Link href="/admin">
                 <SettingRow
                   icon={Shield}
-                  iconBg="bg-primary/10"
+                  iconBg="bg-primary/20"
                   iconColor="text-primary"
                   title={t('adminDashboard')}
                   description="Manage users and system"
@@ -199,53 +194,53 @@ export default function SettingsPage() {
                 />
               </Link>
             )}
-          </Card>
+          </div>
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title={t('integrations')} />
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('integrations')}</h2>
           <Link href="/settings/integrations">
-            <Card className="p-0 overflow-hidden">
+            <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
                 icon={Plug}
-                iconBg="bg-accent/10"
+                iconBg="bg-accent/20"
                 iconColor="text-accent"
                 title={t('integrations')}
                 description={connectedCount > 0 ? `${connectedCount} ${t('servicesConnected')}` : t('connectServices')}
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
-            </Card>
+            </div>
           </Link>
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title="Subscription" />
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Subscription</h2>
           <Link href="/settings/billing">
-            <Card className="p-0 overflow-hidden">
+            <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
                 icon={CreditCard}
-                iconBg="bg-accent/10"
+                iconBg="bg-accent/20"
                 iconColor="text-accent"
                 title="Billing & Plans"
                 description={`Current: ${(profile?.subscription?.plan || 'free').charAt(0).toUpperCase() + (profile?.subscription?.plan || 'free').slice(1)} Plan`}
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
-            </Card>
+            </div>
           </Link>
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title="Preferences" />
-          <Card className="p-0 overflow-hidden divide-y divide-border">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Preferences</h2>
+          <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
             <SettingRow
               icon={Globe}
-              iconBg="bg-accent/10"
+              iconBg="bg-accent/20"
               iconColor="text-accent"
               title={t('language')}
               description={currentLocale === 'ar' ? t('arabic') : t('english')}
               action={
                 <Select value={currentLocale} onValueChange={handleLanguageChange}>
-                  <SelectTrigger className="w-28 h-9 rounded-xl border-0 bg-muted">
+                  <SelectTrigger className="w-28 h-9 rounded-[12px] border-0 bg-muted/50">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -263,7 +258,7 @@ export default function SettingsPage() {
               description={theme === 'light' ? t('light') : theme === 'dark' ? t('dark') : t('system')}
               action={
                 <Select value={theme} onValueChange={handleThemeChange}>
-                  <SelectTrigger className="w-28 h-9 rounded-xl border-0 bg-muted">
+                  <SelectTrigger className="w-28 h-9 rounded-[12px] border-0 bg-muted/50">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -274,7 +269,7 @@ export default function SettingsPage() {
                 </Select>
               }
             />
-          </Card>
+          </div>
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
@@ -366,9 +361,9 @@ export default function SettingsPage() {
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title="About" />
-          <Card className="p-0 overflow-hidden">
-            <a href="https://romnaai.netlify.app/" target="_blank" rel="noopener noreferrer">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">About</h2>
+          <a href="https://romnaai.netlify.app/" target="_blank" rel="noopener noreferrer">
+            <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
                 icon={Info}
                 iconBg="bg-muted"
@@ -377,15 +372,15 @@ export default function SettingsPage() {
                 description="Version 1.0.0 • romnaai.netlify.app"
                 action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
               />
-            </a>
-          </Card>
+            </div>
+          </a>
         </motion.section>
 
         {user && (
           <motion.section variants={itemVariants} className="mb-8">
             <Button
               variant="outline"
-              className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+              className="w-full h-12 text-destructive border-destructive/30 hover:bg-destructive/10 rounded-[16px] font-semibold"
               onClick={handleLogout}
             >
               <LogOut className="w-4 h-4 mr-2" />
@@ -537,14 +532,14 @@ function SettingRow({
   action: React.ReactNode;
 }) {
   return (
-    <div className="p-4 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", iconBg)}>
-          <Icon className={cn("w-5 h-5", iconColor)} />
+    <div className="p-5 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className={cn("w-12 h-12 rounded-[16px] flex items-center justify-center", iconBg)}>
+          <Icon className={cn("w-6 h-6", iconColor)} />
         </div>
         <div>
-          <h3 className="text-sm font-medium">{title}</h3>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+          <p className="text-[13px] text-muted-foreground">{description}</p>
         </div>
       </div>
       {action}

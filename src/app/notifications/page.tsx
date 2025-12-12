@@ -3,15 +3,12 @@
 import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Bell, Sparkles, Calendar, Clock, CheckCircle2, X, ArrowRight } from 'lucide-react';
+import { Bell, Sparkles, Calendar, Clock, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Skeleton } from '@/components/ui/skeleton';
 
 type NotificationType = 'all' | 'insights' | 'ai' | 'reminders';
 
@@ -143,11 +140,11 @@ export default function NotificationsPage() {
     return (
       <PageWrapper className="px-5">
         <div className="mobile-container pt-8">
-          <Skeleton className="h-10 w-48 mb-6" />
-          <Skeleton className="h-12 w-full mb-4" />
-          <Skeleton className="h-32 w-full mb-3" />
-          <Skeleton className="h-32 w-full mb-3" />
-          <Skeleton className="h-32 w-full" />
+          <div className="skeleton h-10 w-48 mb-6" />
+          <div className="skeleton h-12 w-full mb-4" />
+          <div className="glass-card h-32 mb-3 animate-pulse" />
+          <div className="glass-card h-32 mb-3 animate-pulse" />
+          <div className="glass-card h-32 animate-pulse" />
         </div>
       </PageWrapper>
     );
@@ -156,37 +153,74 @@ export default function NotificationsPage() {
   return (
     <PageWrapper className="px-5">
       <div className="mobile-container">
-        <header className="pt-8 pb-4">
+        <header className="pt-8 pb-6">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-[28px] font-extrabold">
+            <h1 className="text-[32px] font-extrabold text-foreground">
               {locale === 'ar' ? 'الإشعارات' : 'Notifications'}
             </h1>
             {unreadCount > 0 && (
-              <Badge className="bg-accent text-accent-foreground">
+              <Badge className="bg-accent/20 text-accent border-0 text-[13px] px-3 py-1 neon-glow">
                 {unreadCount}
               </Badge>
             )}
           </div>
-          <p className="text-muted-foreground text-[14px]">
-            {locale === 'ar' ? 'ابقَ على اطلاع' : 'Stay updated'}
-          </p>
         </header>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as NotificationType)} className="mb-4">
-          <TabsList className="grid w-full grid-cols-4 h-11 rounded-[14px] p-1 bg-muted">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="ai">AI</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-            <TabsTrigger value="reminders">Reminders</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="mb-5">
+          <div className="glass-card p-1.5 inline-flex rounded-full">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={cn(
+                "px-6 py-2 rounded-full text-[14px] font-semibold transition-all",
+                activeTab === 'all' 
+                  ? "bg-accent text-background neon-glow" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={cn(
+                "px-6 py-2 rounded-full text-[14px] font-semibold transition-all",
+                activeTab === 'ai' 
+                  ? "bg-accent text-background neon-glow" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              AI
+            </button>
+            <button
+              onClick={() => setActiveTab('insights')}
+              className={cn(
+                "px-6 py-2 rounded-full text-[14px] font-semibold transition-all",
+                activeTab === 'insights' 
+                  ? "bg-accent text-background neon-glow" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Insights
+            </button>
+            <button
+              onClick={() => setActiveTab('reminders')}
+              className={cn(
+                "px-6 py-2 rounded-full text-[14px] font-semibold transition-all",
+                activeTab === 'reminders' 
+                  ? "bg-accent text-background neon-glow" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Reminders
+            </button>
+          </div>
+        </div>
 
         <div className="pb-24 space-y-3">
           {filteredNotifications.length === 0 ? (
-            <Card className="p-8 text-center">
-              <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">No notifications yet</p>
-            </Card>
+            <div className="glass-card p-10 text-center">
+              <Bell className="w-14 h-14 text-accent/50 mx-auto mb-4" />
+              <p className="text-muted-foreground text-[15px]">No notifications yet</p>
+            </div>
           ) : (
             filteredNotifications.map((notif, index) => (
               <NotificationCard
@@ -214,40 +248,50 @@ function NotificationCard({
 }) {
   const timeAgo = getTimeAgo(notification.created_at);
   
+  const priorityClass = notification.priority === 'urgent' ? 'priority-urgent' : 
+                        notification.priority === 'high' ? 'priority-high' : 'priority-normal';
+  
+  const getIcon = () => {
+    if (notification.priority === 'urgent') return AlertTriangle;
+    if (notification.category === 'insight') return Sparkles;
+    if (notification.category === 'conflict') return Calendar;
+    if (notification.category === 'summary') return CheckCircle2;
+    return AlertCircle;
+  };
+
+  const Icon = getIcon();
+  
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
     >
-      <Card className={cn(
-        "p-4 hover:shadow-md transition-all relative",
-        !notification.is_read && "border-l-4 border-l-accent"
+      <div className={cn(
+        "notification-card cursor-pointer",
+        priorityClass,
+        !notification.is_read && "bg-accent/5"
       )}>
-        {notification.priority === 'urgent' && (
-          <div className="absolute top-2 right-2">
-            <Badge variant="destructive" className="text-[10px] h-5">URGENT</Badge>
-          </div>
-        )}
-        
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-4">
           <div className={cn(
-            "w-10 h-10 rounded-[12px] flex items-center justify-center shrink-0",
-            notification.priority === 'urgent' ? "bg-destructive/10" : "bg-accent/10"
+            "w-12 h-12 rounded-[16px] flex items-center justify-center shrink-0",
+            notification.priority === 'urgent' ? "bg-red-500/20" : 
+            notification.priority === 'high' ? "bg-accent/20 neon-glow" : 
+            "bg-primary/20"
           )}>
-            {notification.category === 'insight' && <Sparkles className="w-5 h-5 text-accent" />}
-            {notification.category === 'conflict' && <Calendar className="w-5 h-5 text-destructive" />}
-            {notification.category === 'summary' && <CheckCircle2 className="w-5 h-5 text-primary" />}
-            {!['insight', 'conflict', 'summary'].includes(notification.category) && (
-              <Clock className="w-5 h-5 text-primary" />
-            )}
+            <Icon className={cn(
+              "w-6 h-6",
+              notification.priority === 'urgent' ? "text-red-500" :
+              notification.priority === 'high' ? "text-accent" :
+              "text-primary"
+            )} />
           </div>
           
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-[14px] font-semibold">{notification.title}</h3>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-[15px] font-semibold text-foreground">{notification.title}</h3>
               {notification.metadata?.isPro && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-accent/30 text-accent">
+                <Badge className="bg-purple-500/20 text-purple-300 border-0 text-[11px] px-2 py-0">
                   PRO
                 </Badge>
               )}
@@ -257,13 +301,12 @@ function NotificationCard({
             </p>
             
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">{timeAgo}</span>
+              <span className="text-[12px] text-accent font-medium">{timeAgo}</span>
               <div className="flex gap-2">
                 {notification.action_label && (
                   <Button 
                     size="sm" 
-                    variant="default" 
-                    className="h-8 text-[12px]"
+                    className="h-8 text-[12px] bg-accent hover:bg-accent/90 text-background font-semibold rounded-[12px]"
                     onClick={() => {
                       if (notification.action_url) {
                         window.location.href = notification.action_url;
@@ -277,8 +320,8 @@ function NotificationCard({
                 {!notification.is_read && (
                   <Button 
                     size="sm" 
-                    variant="outline" 
-                    className="h-8 text-[12px]"
+                    variant="ghost"
+                    className="h-8 text-[12px] text-muted-foreground hover:text-foreground rounded-[12px]"
                     onClick={() => onMarkRead(notification.id)}
                   >
                     Dismiss
@@ -287,8 +330,12 @@ function NotificationCard({
               </div>
             </div>
           </div>
+
+          {!notification.is_read && (
+            <div className="w-2.5 h-2.5 rounded-full bg-accent shrink-0 mt-1 neon-glow" />
+          )}
         </div>
-      </Card>
+      </div>
     </motion.div>
   );
 }

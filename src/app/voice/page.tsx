@@ -28,13 +28,39 @@ export default function VoicePage() {
   } | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef<string>('');
+
+  // Detect best supported MIME type for cross-browser compatibility
+  const getSupportedMimeType = (): string => {
+    const types = [
+      'audio/webm;codecs=opus',  // Chrome, Edge, Firefox (preferred)
+      'audio/mp4',                // Safari, iOS
+      'audio/webm',               // Fallback for older browsers
+      'audio/wav',                // Universal fallback
+    ];
+    
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    
+    return ''; // Let browser choose default
+  };
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      const mimeType = getSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      recordingMimeTypeRef.current = mediaRecorder.mimeType;
+
+      console.log('[Voice Recording] Started with MIME type:', mediaRecorder.mimeType);
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -43,15 +69,29 @@ export default function VoicePage() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(chunksRef.current, { type: recordingMimeTypeRef.current });
         stream.getTracks().forEach((track) => track.stop());
+        
+        console.log('[Voice Recording] Stopped. Blob size:', audioBlob.size, 'Type:', audioBlob.type);
+        
+        // Validate blob before processing
+        if (audioBlob.size === 0) {
+          toast.error(locale === 'ar' ? 'لم يتم تسجيل صوت' : 'No audio recorded');
+          return;
+        }
+        
         await processAudio(audioBlob);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch {
-      toast.error(locale === 'ar' ? 'لم يمكن الوصول للميكروفون' : 'Could not access microphone');
+    } catch (err) {
+      console.error('[Voice Recording] Error:', err);
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        toast.error(locale === 'ar' ? 'تم رفض إذن الميكروفون' : 'Microphone permission denied');
+      } else {
+        toast.error(locale === 'ar' ? 'لم يمكن الوصول للميكروفون' : 'Could not access microphone');
+      }
     }
   }, [locale]);
 
@@ -369,10 +409,10 @@ export default function VoicePage() {
           </div>
           {voiceNotes.length > 0 ? (
             <div className="space-y-3">
-              {voiceNotes.slice(0, 5).map((note, index) => {
+              {voiceNotes.slice(0, 5).map((note) => {
                 const intent = voiceIntents.find(i => i.rawText === note.transcript);
                 return (
-                  <div key={`${note.id}-${index}`} className="glass-card-hover glass-card p-4">
+                  <div key={`${note.id}-${note.createdAt}`} className="glass-card-hover glass-card p-4">
                     <p className="text-[14px] text-foreground line-clamp-2 leading-relaxed mb-3">{note.transcript}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-[12px] text-accent font-medium">

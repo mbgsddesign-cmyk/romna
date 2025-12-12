@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 // Maximum audio duration in seconds (15 seconds for safety)
 const MAX_DURATION_SECONDS = 15;
 // Maximum file size in bytes (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+// Initialize Supabase client for temp file storage
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(request: NextRequest) {
+  let tempFilePath: string | null = null;
+  
   try {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as Blob;
@@ -22,6 +31,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate empty audio
+    if (audioFile.size === 0) {
+      return NextResponse.json(
+        { error: 'Empty audio file - no speech detected' },
+        { status: 400 }
+      );
+    }
+
     const dashscopeApiKey = process.env.DASHSCOPE_API_KEY;
     if (!dashscopeApiKey) {
       return NextResponse.json(
@@ -30,38 +47,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare file for Fun-ASR
-    // Fun-ASR supports: pcm, wav, mp3, opus, speex, aac, amr
-    // Browser MediaRecorder typically outputs webm/opus or webm/vp8
-    // We'll send it as-is and let Fun-ASR handle it (supports opus in Ogg container)
-    
-    const asrFormData = new FormData();
-    asrFormData.append('model', 'paraformer-realtime-v2');
-    asrFormData.append('file', audioFile, 'recording.webm');
-    asrFormData.append('language_hints', 'en'); // Support English, can add 'ar' for Arabic
-
-    console.log('[Fun-ASR] Sending audio for transcription:', {
+    console.log('[Fun-ASR] Processing audio:', {
       size: audioFile.size,
       type: audioFile.type,
       maxDuration: MAX_DURATION_SECONDS,
     });
 
-    // Use DashScope REST API for file transcription
-    // Endpoint: https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription
-    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${dashscopeApiKey}`,
-        'X-DashScope-Async': 'enable', // Enable async processing for files
-      },
-      body: asrFormData,
-    });
+    // Step 1: Upload audio to Supabase temp storage
+    const filename = `voice-${Date.now()}-${Math.random().toString(36).slice(2)}.webm`;
+    tempFilePath = `temp-asr/${filename}`;
+    
+    const arrayBuffer = await audioFile.arrayBuffer();
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('voice-temp')
+      .upload(tempFilePath, arrayBuffer, {
+        contentType: audioFile.type || 'audio/webm',
+        upsert: false,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Fun-ASR] Transcription failed:', {
-        status: response.status,
-        statusText: response.statusText,
+    if (uploadError) {
+      console.error('[Fun-ASR] Upload error:', uploadError);
+      return NextResponse.json(
+        { error: 'Failed to upload audio for processing' },
+        { status: 500 }
+      );
+    }
+
+    // Step 2: Get public URL
+    const { data: urlData } = supabase.storage
+      .from('voice-temp')
+      .getPublicUrl(tempFilePath);
+    
+    const fileUrl = urlData.publicUrl;
+    
+    console.log('[Fun-ASR] Audio uploaded, calling ASR with URL:', fileUrl);
+
+    // Step 3: Call Fun-ASR async_call with file URL
+    const asrPayload = {
+      model: 'fun-asr',
+      input: {
+        file_urls: [fileUrl]
+      },
+      parameters: {
+        language_hints: ['en']  // English support
+      }
+    };
+
+    const asrResponse = await fetch(
+      'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/asr/transcription',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${dashscopeApiKey}`,
+          'Content-Type': 'application/json',
+          'X-DashScope-Async': 'enable',
+        },
+        body: JSON.stringify(asrPayload),
+      }
+    );
+
+    if (!asrResponse.ok) {
+      const errorText = await asrResponse.text();
+      console.error('[Fun-ASR] ASR API error:', {
+        status: asrResponse.status,
+        statusText: asrResponse.statusText,
         error: errorText,
       });
       
@@ -69,79 +118,90 @@ export async function POST(request: NextRequest) {
         { 
           error: 'Transcription failed', 
           details: errorText,
-          provider: 'Fun-ASR (Alibaba Cloud)'
+          provider: 'Fun-ASR (Alibaba Cloud International)'
         },
-        { status: response.status }
+        { status: asrResponse.status }
       );
     }
 
-    const data = await response.json();
-    
-    console.log('[Fun-ASR] Transcription response:', data);
+    const asrData = await asrResponse.json();
+    console.log('[Fun-ASR] Task submitted:', asrData);
 
-    // Extract transcript from Fun-ASR response
-    // Response format: { output: { task_id, task_status, url }, usage: { duration } }
-    // For async tasks, we need to poll the task_id
-    if (data.output?.task_status === 'PENDING' || data.output?.task_status === 'RUNNING') {
-      // Poll for completion (simplified for now)
-      const taskId = data.output.task_id;
-      let transcript = '';
-      let attempts = 0;
-      const maxAttempts = 10;
-
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms between polls
-        
-        const pollResponse = await fetch(`https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`, {
-          headers: {
-            'Authorization': `Bearer ${dashscopeApiKey}`,
-          },
-        });
-
-        if (pollResponse.ok) {
-          const pollData = await pollResponse.json();
-          
-          if (pollData.output?.task_status === 'SUCCEEDED') {
-            // Download result from URL
-            if (pollData.output.url) {
-              const resultResponse = await fetch(pollData.output.url);
-              const resultData = await resultResponse.json();
-              transcript = resultData.transcripts?.[0]?.text || resultData.output?.sentence?.text || '';
-            } else {
-              transcript = pollData.output?.sentence?.text || pollData.output?.text || '';
-            }
-            break;
-          } else if (pollData.output?.task_status === 'FAILED') {
-            throw new Error('Fun-ASR task failed');
-          }
-        }
-        
-        attempts++;
-      }
-
-      if (!transcript) {
-        throw new Error('Transcription timeout or empty result');
-      }
-
-      return NextResponse.json({ transcript });
+    // Step 4: Poll for completion
+    const taskId = asrData.output?.task_id;
+    if (!taskId) {
+      throw new Error('No task_id returned from Fun-ASR');
     }
 
-    // Handle direct response (if not async)
-    const transcript = data.output?.sentence?.text || data.output?.text || '';
-    
+    let transcript = '';
+    let attempts = 0;
+    const maxAttempts = 15;  // 15 seconds max polling
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every 1 second
+      
+      const pollResponse = await fetch(
+        `https://dashscope-intl.aliyuncs.com/api/v1/tasks/${taskId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${dashscopeApiKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (pollResponse.ok) {
+        const pollData = await pollResponse.json();
+        const taskStatus = pollData.output?.task_status;
+        
+        console.log(`[Fun-ASR] Poll attempt ${attempts + 1}: ${taskStatus}`);
+        
+        if (taskStatus === 'SUCCEEDED') {
+          // Extract transcript
+          const results = pollData.output?.results || [];
+          if (results.length > 0 && results[0].transcription) {
+            transcript = results[0].transcription.text || '';
+          }
+          break;
+        } else if (taskStatus === 'FAILED') {
+          throw new Error('Fun-ASR transcription task failed');
+        }
+      }
+      
+      attempts++;
+    }
+
+    // Step 5: Cleanup temp file
+    if (tempFilePath) {
+      await supabase.storage.from('voice-temp').remove([tempFilePath]);
+      console.log('[Fun-ASR] Temp file cleaned up:', tempFilePath);
+    }
+
     if (!transcript) {
-      console.error('[Fun-ASR] No transcript in response:', data);
       return NextResponse.json(
-        { error: 'No transcript returned from Fun-ASR' },
+        { error: 'No transcript returned or timeout exceeded' },
         { status: 500 }
       );
     }
 
+    console.log('[Fun-ASR] Success! Transcript:', transcript);
     return NextResponse.json({ transcript });
+
   } catch (error) {
-    console.error('[Fun-ASR] Transcription error:', error);
+    console.error('[Fun-ASR] Error:', error);
+    
+    // Cleanup on error
+    if (tempFilePath) {
+      try {
+        await supabase.storage.from('voice-temp').remove([tempFilePath]);
+      } catch {}
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Internal server error', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      },
       { status: 500 }
     );
   }

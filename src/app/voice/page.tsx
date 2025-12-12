@@ -187,102 +187,123 @@ export default function VoicePage() {
   const handleApproveAction = async () => {
     if (!detectedIntent || !transcript) return;
 
-    addVoiceNote({ transcript, intent: detectedIntent.type });
-    
-    addVoiceIntent({
-      type: detectedIntent.type,
-      rawText: transcript,
-      structuredData: detectedIntent.data,
-      status: detectedIntent.data.scheduledFor ? 'scheduled' : 'executed',
-      scheduledFor: detectedIntent.data.scheduledFor as string | undefined,
-    });
-
-    if (detectedIntent.type === 'task') {
-      const taskData = detectedIntent.data as { title?: string; dueDate?: string; date?: string; priority?: 'low' | 'medium' | 'high' };
-      const taskTitle = taskData.title || transcript;
-      const dueDate = taskData.dueDate || taskData.date || new Date().toISOString();
-      
-      addTask({
-        title: taskTitle,
-        dueDate: dueDate,
-        priority: taskData.priority || 'medium',
-        status: 'pending',
+    try {
+      const res = await fetch('/api/actions/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intent: detectedIntent.type,
+          payload: {
+            transcript,
+            confidence: detectedIntent.confidence,
+            data: detectedIntent.data,
+          }
+        })
       });
 
-      if (user?.id) {
-        await supabase.from('tasks').insert({
-          user_id: user.id,
+      if (!res.ok) throw new Error('Approve failed');
+
+      // Keep existing UI state management
+      addVoiceNote({ transcript, intent: detectedIntent.type });
+      
+      addVoiceIntent({
+        type: detectedIntent.type,
+        rawText: transcript,
+        structuredData: detectedIntent.data,
+        status: detectedIntent.data.scheduledFor ? 'scheduled' : 'executed',
+        scheduledFor: detectedIntent.data.scheduledFor as string | undefined,
+      });
+
+      if (detectedIntent.type === 'task') {
+        const taskData = detectedIntent.data as { title?: string; dueDate?: string; date?: string; priority?: 'low' | 'medium' | 'high' };
+        const taskTitle = taskData.title || transcript;
+        const dueDate = taskData.dueDate || taskData.date || new Date().toISOString();
+        
+        addTask({
           title: taskTitle,
-          due_date: dueDate,
+          dueDate: dueDate,
           priority: taskData.priority || 'medium',
           status: 'pending',
-          source: 'voice',
         });
-      }
-      
-      toast.success(locale === 'ar' ? 'تم إنشاء المهمة!' : 'Task created!');
-    } else if (detectedIntent.type === 'event') {
-      const eventData = detectedIntent.data as { title?: string; date?: string; location?: string; time?: string };
-      const eventTitle = eventData.title || transcript;
-      let eventDate = eventData.date || new Date().toISOString();
-      if (eventData.time) {
-        const timePart = eventData.time.replace(/[^\d:]/g, '');
-        eventDate = `${eventDate.split('T')[0]}T${timePart.padStart(5, '0')}:00`;
-      }
 
-      addEvent({
-        title: eventTitle,
-        date: eventDate,
-        location: eventData.location,
-      });
+        if (user?.id) {
+          await supabase.from('tasks').insert({
+            user_id: user.id,
+            title: taskTitle,
+            due_date: dueDate,
+            priority: taskData.priority || 'medium',
+            status: 'pending',
+            source: 'voice',
+          });
+        }
+        
+        toast.success(locale === 'ar' ? 'تم إنشاء المهمة!' : 'Task created!');
+      } else if (detectedIntent.type === 'event') {
+        const eventData = detectedIntent.data as { title?: string; date?: string; location?: string; time?: string };
+        const eventTitle = eventData.title || transcript;
+        let eventDate = eventData.date || new Date().toISOString();
+        if (eventData.time) {
+          const timePart = eventData.time.replace(/[^\d:]/g, '');
+          eventDate = `${eventDate.split('T')[0]}T${timePart.padStart(5, '0')}:00`;
+        }
 
-      if (user?.id) {
-        await supabase.from('events').insert({
-          user_id: user.id,
+        addEvent({
           title: eventTitle,
-          start_time: eventDate,
+          date: eventDate,
           location: eventData.location,
-          source: 'voice',
         });
-      }
 
-      toast.success(locale === 'ar' ? 'تم إنشاء الحدث!' : 'Event created!');
-    } else if (detectedIntent.type === 'reminder') {
-      const reminderData = detectedIntent.data as { title?: string; date?: string; time?: string };
-      const reminderTitle = reminderData.title || transcript;
-      let reminderDate = reminderData.date || new Date(Date.now() + 3600000).toISOString();
+        if (user?.id) {
+          await supabase.from('events').insert({
+            user_id: user.id,
+            title: eventTitle,
+            start_time: eventDate,
+            location: eventData.location,
+            source: 'voice',
+          });
+        }
 
-      addTask({
-        title: `🔔 ${reminderTitle}`,
-        dueDate: reminderDate,
-        priority: 'high',
-        status: 'pending',
-      });
+        toast.success(locale === 'ar' ? 'تم إنشاء الحدث!' : 'Event created!');
+      } else if (detectedIntent.type === 'reminder') {
+        const reminderData = detectedIntent.data as { title?: string; date?: string; time?: string };
+        const reminderTitle = reminderData.title || transcript;
+        let reminderDate = reminderData.date || new Date(Date.now() + 3600000).toISOString();
 
-      if (user?.id) {
-        await supabase.from('tasks').insert({
-          user_id: user.id,
+        addTask({
           title: `🔔 ${reminderTitle}`,
-          due_date: reminderDate,
+          dueDate: reminderDate,
           priority: 'high',
           status: 'pending',
-          source: 'voice',
         });
+
+        if (user?.id) {
+          await supabase.from('tasks').insert({
+            user_id: user.id,
+            title: `🔔 ${reminderTitle}`,
+            due_date: reminderDate,
+            priority: 'high',
+            status: 'pending',
+            source: 'voice',
+          });
+        }
+
+        toast.success(locale === 'ar' ? 'تم إنشاء التذكير!' : 'Reminder set!');
+      } else if (detectedIntent.type === 'whatsapp_message') {
+        toast.success(locale === 'ar' ? 'تم جدولة رسالة واتساب!' : 'WhatsApp message scheduled!');
+      } else if (detectedIntent.type === 'telegram_message') {
+        toast.success(locale === 'ar' ? 'تم جدولة رسالة تيليجرام!' : 'Telegram message scheduled!');
+      } else if (detectedIntent.type === 'email') {
+        toast.success(locale === 'ar' ? 'تم حفظ مسودة البريد!' : 'Email draft saved!');
+      } else {
+        toast.success(locale === 'ar' ? 'تم الحفظ!' : 'Saved!');
       }
 
-      toast.success(locale === 'ar' ? 'تم إنشاء التذكير!' : 'Reminder set!');
-    } else if (detectedIntent.type === 'whatsapp_message') {
-      toast.success(locale === 'ar' ? 'تم جدولة رسالة واتساب!' : 'WhatsApp message scheduled!');
-    } else if (detectedIntent.type === 'telegram_message') {
-      toast.success(locale === 'ar' ? 'تم جدولة رسالة تيليجرام!' : 'Telegram message scheduled!');
-    } else if (detectedIntent.type === 'email') {
-      toast.success(locale === 'ar' ? 'تم حفظ مسودة البريد!' : 'Email draft saved!');
-    } else {
-      toast.success(locale === 'ar' ? 'تم الحفظ!' : 'Saved!');
+      setTranscript('');
+      setDetectedIntent(null);
+    } catch (error) {
+      console.error('Approve action error:', error);
+      toast.error(locale === 'ar' ? 'فشل حفظ الإجراء' : 'Failed to save action');
     }
-
-    setTranscript('');
-    setDetectedIntent(null);
   };
 
   const getStatusIcon = (status: string) => {

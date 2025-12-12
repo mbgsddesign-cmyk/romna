@@ -177,6 +177,33 @@ Notification Payload
 
 ⸻
 
+ACTION GENERATION RULES (HUMAN-IN-THE-LOOP)
+
+You may propose an action ONLY IF:
+	•	Confidence is HIGH (>= 0.8)
+	•	The action is concrete and complete
+	•	It solves a specific user problem (e.g. scheduling conflict, missing task)
+
+Action Types:
+	•	create_task
+	•	reschedule_event
+	•	send_email (draft only)
+
+Action Candidate Output Format (JSON):
+"action_candidate": {
+  "type": "create_task",
+  "payload": {
+    "title": "...",
+    "description": "...",
+    "due_date": "ISO_TIMESTAMP",
+    "priority": "high"
+  },
+  "confidence": 0.95,
+  "reason": "Detected urgency in voice note"
+}
+
+⸻
+
 PRO VS FREE LOGIC
 
 Free Users
@@ -243,6 +270,7 @@ Structure:
 {
   "insight": { ... } | null,
   "notification": { ... } | null,
+  "action_candidate": { ... } | null,
   "log": { "action": "...", "meta": ... }
 }
 `;
@@ -377,7 +405,27 @@ export class AutoGLM {
         });
       }
 
-      // 7.2 Notification
+      // 7.2 Action Candidate (Human-in-the-loop)
+      let actionHash: string | null = null;
+      if (result.action_candidate && result.action_candidate.confidence >= 0.8) {
+         const payloadString = JSON.stringify(result.action_candidate.payload);
+         actionHash = createHash('md5').update(payloadString + Date.now().toString()).digest('hex'); // Unique hash for this instance
+
+         await supabase.from('user_activity').insert({
+           user_id: userId,
+           action: 'action_proposed',
+           meta: {
+             ...result.action_candidate,
+             status: 'pending',
+             action_hash: actionHash,
+             created_at: new Date().toISOString()
+           }
+         });
+         
+         console.log(`[AutoGLM] Action proposed: ${result.action_candidate.type} (${actionHash})`);
+      }
+
+      // 7.3 Notification
       if (result.notification) {
         const dispatcher = new NotificationDispatcher(supabase);
         
@@ -389,16 +437,20 @@ export class AutoGLM {
             priority: result.notification.priority === 1 ? 'high' : 'normal',
             ai_reason: result.notification.ai_reason,
             category: 'ai',
+            // Link notification to the action if present
+            action_url: actionHash ? `/api/actions/execute?hash=${actionHash}` : null,
+            action_label: actionHash ? 'Confirm Action' : null,
             metadata: { 
               trigger,
-              pro_eligible: result.notification.pro_eligible || false 
+              pro_eligible: result.notification.pro_eligible || false,
+              action_hash: actionHash
             }
           },
           userPrefs
         );
       }
 
-      // 7.3 Log Activity
+      // 7.4 Log Activity
       if (result.log) {
         await supabase.from('user_activity').insert({
           user_id: userId,

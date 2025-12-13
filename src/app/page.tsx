@@ -16,6 +16,12 @@ export default function HomePage() {
   const { decision, loading, error, status, refetch } = useAutoGLMDecision();
   const { openDrawer } = useRomnaAI();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [hasAnimated, setHasAnimated] = useState(false);
+
+  // Mark as animated after first render
+  useEffect(() => {
+    setHasAnimated(true);
+  }, []);
 
   const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
     if (actionLoading) return;
@@ -85,8 +91,9 @@ export default function HomePage() {
   return (
     <PageWrapper className="px-5">
       <motion.div
+        key="home-content"
         variants={containerVariants}
-        initial="hidden"
+        initial={hasAnimated ? false : "hidden"}
         animate="visible"
       >
         <motion.header variants={itemVariants} className="pt-8 pb-6">
@@ -270,14 +277,19 @@ export default function HomePage() {
 function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; locale: string }) {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const taskId = activeTask?.id; // Extract stable ID
 
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchEvents = async () => {
+      if (!isMounted) return;
+      
       try {
         const { supabase } = await import('@/lib/supabase');
         const { data: { user } } = await supabase.auth.getUser();
         
-        if (!user) return;
+        if (!user || !isMounted) return;
 
         const today = new Date();
         const tomorrow = new Date(today);
@@ -292,18 +304,22 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
           .lte('start_time', tomorrow.toISOString())
           .order('start_time');
 
-        if (!error && data) {
+        if (!error && data && isMounted) {
           setEvents(data);
         }
       } catch (err) {
         console.error('Failed to fetch events:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchEvents();
-  }, [activeTask?.id]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [taskId]); // Use stable taskId
 
   if (loading) return null;
   

@@ -16,14 +16,22 @@ interface ExecutionPlan {
   scheduled_for: string;
   requires_approval: boolean;
   status: 'pending' | 'waiting_approval' | 'scheduled' | 'executed' | 'cancelled' | 'failed';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: Record<string, any>;
   created_at: string;
   error_message?: string;
 }
 
+interface ExecutionCardProps {
+  plan: ExecutionPlan;
+  index: number;
+  onApprove: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}
+
 export default function NotificationsPage() {
-  const { t, locale } = useTranslation();
-  const router = useRouter();
+  const { locale } = useTranslation();
   const [plans, setPlans] = useState<ExecutionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -41,7 +49,7 @@ export default function NotificationsPage() {
       const data = await response.json();
       if (data.success && data.plans) setPlans(data.plans);
       else setPlans([]);
-    } catch (error) {
+    } catch {
       setPlans([]);
     } finally {
       setLoading(false);
@@ -130,7 +138,7 @@ export default function NotificationsPage() {
   );
 }
 
-function ExecutionCard({ plan, index, onApprove, onCancel, loading }: any) {
+function ExecutionCard({ plan, index, onApprove, onCancel, loading }: ExecutionCardProps) {
   const isApproval = plan.status === 'waiting_approval';
   
   return (

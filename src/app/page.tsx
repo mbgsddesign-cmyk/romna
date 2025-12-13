@@ -20,7 +20,7 @@ interface Task {
 }
 
 export default function HomePage() {
-  const { decision, loading: decisionLoading } = useAutoGLMDecision();
+  const { decision } = useAutoGLMDecision();
   const { user } = useAuth();
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [tomorrowTasks, setTomorrowTasks] = useState<Task[]>([]);

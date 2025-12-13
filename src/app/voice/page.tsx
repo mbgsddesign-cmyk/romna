@@ -13,10 +13,9 @@ export default function VoicePage() {
   const { t, locale } = useTranslation();
   const { user } = useAuth();
   const router = useRouter();
-  const { addVoiceNote, addVoiceIntent } = useAppStore();
+  const { } = useAppStore();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [transcript, setTranscript] = useState('');
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -63,7 +62,7 @@ export default function VoicePage() {
       console.error('Mic Error:', err);
       toast.error('Microphone access denied');
     }
-  }, []);
+  }, [processAudio]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -77,9 +76,8 @@ export default function VoicePage() {
     else startRecording();
   };
 
-  const processAudio = async (audioBlob: Blob) => {
+  const processAudio = useCallback(async (audioBlob: Blob) => {
     setIsProcessing(true);
-    setTranscript('');
     setProcessingStatus(locale === 'ar' ? 'جاري الاستماع...' : 'Listening...');
 
     try {
@@ -100,7 +98,6 @@ export default function VoicePage() {
         return;
       }
       
-      setTranscript(text);
       setProcessingStatus(locale === 'ar' ? 'فهمت.' : 'I understand.');
 
       if (!user?.id) return;
@@ -128,14 +125,14 @@ export default function VoicePage() {
         setTimeout(() => router.push('/'), 800);
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Processing error:', err);
       toast.error('Processing failed');
     } finally {
       setIsProcessing(false);
       setProcessingStatus('');
     }
-  };
+  }, [locale, router, user]);
 
   return (
     <div className="relative h-screen w-full bg-void overflow-hidden flex flex-col items-center justify-center">

@@ -126,7 +126,7 @@ export default function HomePage() {
                      <p className="text-center text-xs text-white/40 font-space tracking-widest uppercase mb-1">
                        When you&apos;re ready.
                      </p>
-                     <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.2)]">
+                     <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.15)]">
                         <span className="relative z-10 flex items-center justify-center gap-3">
                           <span className="material-symbols-outlined text-[28px]">play_circle</span>
                           EXECUTE

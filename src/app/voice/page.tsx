@@ -153,7 +153,7 @@ export default function VoicePage() {
           <div className={`absolute inset-0 rounded-full bg-gradient-to-br from-volt to-[#bfff00] blur-[20px] transition-all duration-700 ${isRecording ? 'opacity-20 animate-pulse-slow' : 'opacity-10 animate-float'}`}></div>
           
           {/* Core Orb */}
-          <div className={`absolute inset-0 m-auto rounded-full bg-volt shadow-[0_0_50px_rgba(217,253,0,0.4)] transition-all duration-500 ${isRecording ? 'w-full h-full opacity-10 blur-[80px]' : 'w-16 h-16 opacity-100'}`}>
+          <div className={`absolute inset-0 m-auto rounded-full bg-volt shadow-[0_0_50px_rgba(217,253,0,0.3)] transition-all duration-500 ${isRecording ? 'w-full h-full opacity-10 blur-[80px]' : 'w-16 h-16 opacity-100'}`}>
             {!isRecording && !isProcessing && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-4 h-4 bg-black rounded-full opacity-50 animate-ping"></div>

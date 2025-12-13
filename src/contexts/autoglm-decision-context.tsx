@@ -29,6 +29,7 @@ interface AutoGLMDecisionContextValue {
   decision: DayDecision | null;
   loading: boolean;
   error: string | null;
+  status: 'loading' | 'ready' | 'empty' | 'error';
   refetch: () => Promise<void>;
 }
 
@@ -39,14 +40,17 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
   const [decision, setDecision] = useState<DayDecision | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
 
   const fetchDecision = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
+      setStatus('empty');
       return;
     }
 
     setLoading(true);
+    setStatus('loading');
     setError(null);
 
     try {
@@ -68,18 +72,21 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
 
       if (data.success && data.decision) {
         setDecision(data.decision);
+        setStatus(data.decision.active_task ? 'ready' : 'empty');
       } else {
         setDecision(null);
+        setStatus('empty');
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.error('[AutoGLM Decision] Request timeout');
-        setError('Request timeout');
+        setError('Request timeout. Please try again.');
       } else {
         console.error('[AutoGLM Decision] Fetch error:', err);
         setError(err.message || 'Failed to fetch decision');
       }
       setDecision(null);
+      setStatus('error');
     } finally {
       setLoading(false);
     }
@@ -99,6 +106,7 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
         decision,
         loading,
         error,
+        status,
         refetch,
       }}
     >

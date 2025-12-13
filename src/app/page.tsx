@@ -3,25 +3,28 @@
 import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
-import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight } from 'lucide-react';
+import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight, RefreshCcw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 
 export default function HomePage() {
   const { t, locale } = useTranslation();
-  const { decision, loading, refetch } = useAutoGLMDecision();
+  const { decision, loading, error, status, refetch } = useAutoGLMDecision();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
+    if (actionLoading) return;
     setActionLoading(action);
     try {
       const { supabase } = await import('@/lib/supabase');
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) return;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch('/api/autoglm/action', {
         method: 'POST',
@@ -31,7 +34,10 @@ export default function HomePage() {
           action,
           taskId: decision?.active_task?.id,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         await refetch();
@@ -41,6 +47,23 @@ export default function HomePage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const formatDecisionReason = (task: any) => {
+    if (!task?.ai_reason) return '';
+    
+    const reason = task.ai_reason;
+    const title = task.title;
+    
+    if (reason.includes('Overdue') && task.priority === 'high') {
+      return `This is overdue and high priority. ${locale === 'ar' ? 'ابدأ الآن' : 'Start now'}.`;
+    }
+    
+    if (reason.includes('High priority')) {
+      return `Because this is high priority, ${locale === 'ar' ? 'ركز عليه الآن' : 'focus on it now'}.`;
+    }
+    
+    return `${reason}. ${locale === 'ar' ? 'هذا هو الأفضل الآن' : 'This is the best next step'}.`;
   };
 
   const containerVariants = {
@@ -72,14 +95,33 @@ export default function HomePage() {
           </p>
         </motion.header>
 
-        {loading ? (
+        {status === 'loading' ? (
           <div className="glass-card p-8">
             <div className="flex flex-col items-center gap-4">
               <div className="w-16 h-16 rounded-full bg-accent/20 animate-pulse" />
               <div className="h-4 w-48 bg-muted/20 rounded animate-pulse" />
             </div>
           </div>
-        ) : !decision?.active_task ? (
+        ) : status === 'error' ? (
+          <motion.div variants={itemVariants} className="glass-card p-8 text-center">
+            <AlertCircle className="w-16 h-16 text-destructive/50 mx-auto mb-4" />
+            <h2 className="text-[20px] font-bold text-foreground mb-2">
+              {locale === 'ar' ? 'فشل تحميل القرار' : 'Failed to load decision'}
+            </h2>
+            <p className="text-[14px] text-muted-foreground mb-6">
+              {error || (locale === 'ar' ? 'حدث خطأ. حاول مرة أخرى.' : 'Something went wrong. Try again.')}
+            </p>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={refetch}
+              disabled={loading}
+              className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+            </motion.button>
+          </motion.div>
+        ) : status === 'empty' || !decision?.active_task ? (
           <motion.div variants={itemVariants} className="glass-card p-8 text-center">
             <Brain className="w-16 h-16 text-accent/30 mx-auto mb-4" />
             <h2 className="text-[20px] font-bold text-foreground mb-2">
@@ -87,8 +129,8 @@ export default function HomePage() {
             </h2>
             <p className="text-[14px] text-muted-foreground mb-6">
               {decision?.active_task_reason || (locale === 'ar' 
-                ? 'لا توجد مهام للعمل عليها الآن'
-                : 'No tasks to work on right now.')}
+                ? 'رائع! لا توجد مهام عاجلة الآن. أضف مهمة جديدة أو استرح.'
+                : 'Great! No urgent tasks right now. Add a new task or take a break.')}
             </p>
             <Link href="/tasks?action=new">
               <motion.button
@@ -105,7 +147,7 @@ export default function HomePage() {
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="w-5 h-5 text-accent" />
                 <span className="text-[12px] font-bold text-accent uppercase tracking-wide">
-                  {locale === 'ar' ? 'قرار اليوم' : 'Today\'s Focus'}
+                  {locale === 'ar' ? 'قرار اليوم' : 'Now'}
                 </span>
               </div>
 
@@ -142,7 +184,7 @@ export default function HomePage() {
                       {locale === 'ar' ? 'لماذا الآن؟' : 'Why now?'}
                     </p>
                     <p className="text-[13px] text-foreground leading-relaxed">
-                      {decision.active_task.ai_reason}
+                      {formatDecisionReason(decision.active_task)}
                     </p>
                   </div>
                 </div>
@@ -156,11 +198,11 @@ export default function HomePage() {
                   className="w-full px-6 py-4 rounded-[16px] bg-accent text-accent-foreground font-bold text-[15px] neon-glow flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {actionLoading === 'start' ? (
-                    <>Processing...</>
+                    <>{locale === 'ar' ? 'جاري التنفيذ...' : 'Processing...'}</>
                   ) : (
                     <>
                       <Play className="w-5 h-5" />
-                      {locale === 'ar' ? 'ابدأ' : 'Execute'}
+                      {locale === 'ar' ? 'ابدأ الآن' : 'Execute'}
                     </>
                   )}
                 </motion.button>
@@ -193,7 +235,7 @@ export default function HomePage() {
               <motion.div variants={itemVariants} className="glass-card p-5 mb-6">
                 <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-accent" />
-                  {locale === 'ar' ? 'توصيات اليوم' : "AI Insights"}
+                  {locale === 'ar' ? 'توصيات اليوم' : "Today's Insights"}
                 </h3>
                 <div className="space-y-2">
                   {decision.recommendations.slice(0, 3).map((rec, idx) => (

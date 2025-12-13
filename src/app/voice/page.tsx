@@ -101,7 +101,7 @@ export default function VoicePage() {
       }
       
       setTranscript(text);
-      setProcessingStatus(locale === 'ar' ? 'جاري التفكير...' : 'Thinking...');
+      setProcessingStatus(locale === 'ar' ? 'فهمت.' : 'I understand.');
 
       if (!user?.id) return;
 
@@ -183,9 +183,7 @@ export default function VoicePage() {
                  <span className="text-volt font-space text-lg tracking-widest uppercase animate-pulse">
                    {processingStatus}
                  </span>
-                 {transcript && (
-                   <p className="text-white/60 text-sm font-light italic">"{transcript}"</p>
-                 )}
+                 {/* Hide transcript text to match 'Silent Commander' vibe unless requested, but here we keep it hidden or subtle */}
                </motion.div>
             ) : isRecording ? (
                <motion.div
@@ -202,7 +200,9 @@ export default function VoicePage() {
                  transition={{ delay: 0.5 }}
                  className="mt-32"
                >
-                 <p className="text-white/30 text-xs font-space tracking-[0.2em] uppercase">Tap to Speak</p>
+                 <p className="text-white/30 text-xs font-space tracking-[0.2em] uppercase">
+                   {locale === 'ar' ? 'قل ما تريد مني التعامل معه' : 'Say what you want me to handle.'}
+                 </p>
                </motion.div>
             )}
           </AnimatePresence>

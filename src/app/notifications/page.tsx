@@ -102,7 +102,9 @@ export default function NotificationsPage() {
         ) : activePlans.length === 0 ? (
            <div className="mt-32 flex flex-col items-center text-center opacity-40">
               <div className="w-16 h-1 bg-white/10 rounded-full mb-4"></div>
-              <p className="text-white/50 font-space text-lg">All caught up.</p>
+              <p className="text-white/50 font-space text-lg">
+                {locale === 'ar' ? 'لا شيء يحتاجك الآن.' : 'All quiet now.'}
+              </p>
               <p className="text-white/20 text-xs mt-2">Nothing requires your attention.</p>
            </div>
         ) : (

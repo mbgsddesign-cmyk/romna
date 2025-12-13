@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import { BottomNav } from '@/components/bottom-nav';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Task {
   id: string;
@@ -23,6 +24,16 @@ export default function HomePage() {
   const { user } = useAuth();
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [tomorrowTasks, setTomorrowTasks] = useState<Task[]>([]);
+  const [showExecute, setShowExecute] = useState(false);
+
+  useEffect(() => {
+    if (decision?.active_task) {
+       const timer = setTimeout(() => setShowExecute(true), 500); // 500ms delay
+       return () => clearTimeout(timer);
+    } else {
+       setShowExecute(false);
+    }
+  }, [decision?.active_task]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -102,15 +113,29 @@ export default function HomePage() {
           </div>
 
           {/* 3. The Action: Massive Execute Slide-Button */}
-          <div className="p-4 bg-gradient-to-t from-black/80 to-transparent">
+          <div className="p-4 bg-gradient-to-t from-black/80 to-transparent flex flex-col gap-3">
              {hasActiveTask ? (
-               <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.2)]">
-                  <span className="relative z-10 flex items-center justify-center gap-3">
-                    <span className="material-symbols-outlined text-[28px]">play_circle</span>
-                    EXECUTE
-                  </span>
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[24px]"></div>
-               </button>
+               <AnimatePresence>
+                 {showExecute && (
+                   <motion.div
+                     initial={{ opacity: 0, y: 20 }}
+                     animate={{ opacity: 1, y: 0 }}
+                     exit={{ opacity: 0, y: 20 }}
+                     className="w-full flex flex-col gap-2"
+                   >
+                     <p className="text-center text-xs text-white/40 font-space tracking-widest uppercase mb-1">
+                       When you&apos;re ready.
+                     </p>
+                     <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.2)]">
+                        <span className="relative z-10 flex items-center justify-center gap-3">
+                          <span className="material-symbols-outlined text-[28px]">play_circle</span>
+                          EXECUTE
+                        </span>
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[24px]"></div>
+                     </button>
+                   </motion.div>
+                 )}
+               </AnimatePresence>
              ) : (
                 <div className="w-full h-20 flex items-center justify-center text-gray-500 text-sm font-space tracking-widest uppercase opacity-50">
                    System Idle

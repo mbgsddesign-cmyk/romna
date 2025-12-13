@@ -1,6 +1,7 @@
 'use client';
 
 import { PageWrapper } from '@/components/page-wrapper';
+import { BottomNav } from '@/components/bottom-nav';
 import { useTranslation } from '@/hooks/use-translation';
 import { useAppStore, IntentType } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
@@ -214,111 +215,114 @@ export default function VoicePage() {
   };
 
   return (
-    <PageWrapper className="px-5">
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <motion.header variants={itemVariants} className="pt-8 pb-6 text-center">
-          <h1 className="text-[32px] font-extrabold text-foreground mb-2">{t('voice')}</h1>
-          <p className="text-accent text-[14px] font-medium">
-            {locale === 'ar' ? 'اطلب أي شيء بصوتك' : 'Just speak your mind'}
-          </p>
-        </motion.header>
-
-        <motion.div variants={itemVariants} className="flex flex-col items-center justify-center py-12">
-          {isProcessing ? (
-            <div className="w-36 h-36 rounded-full bg-accent/20 flex items-center justify-center neon-glow-strong animate-pulse">
-              <Loader2 className="w-14 h-14 text-accent animate-spin" />
-            </div>
-          ) : (
-            <div className="relative">
-              <MicButton 
-                size="hero"
-                isRecording={isRecording}
-                onPressStart={startRecording}
-                onPressEnd={stopRecording}
-              />
-              {isRecording && (
-                <div className="absolute inset-0 rounded-full neon-glow-strong animate-pulse pointer-events-none" />
-              )}
-            </div>
-          )}
-
-          <motion.div
-            variants={itemVariants}
-            className="mt-8 flex flex-col items-center"
-          >
-            <Waveform isActive={isRecording} barCount={7} className="h-10 mb-4" />
-            <p className="text-[15px] text-muted-foreground font-medium">
-              {isProcessing && processingStatus ? processingStatus : isProcessing ? t('processing') : isRecording ? t('recording') : t('holdToRecord')}
+    <>
+      <PageWrapper className="px-5">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.header variants={itemVariants} className="pt-8 pb-6 text-center">
+            <h1 className="text-[32px] font-extrabold text-foreground mb-2">{t('voice')}</h1>
+            <p className="text-accent text-[14px] font-medium">
+              {locale === 'ar' ? 'اطلب أي شيء بصوتك' : 'Just speak your mind'}
             </p>
-          </motion.div>
-        </motion.div>
+          </motion.header>
 
-        <AnimatePresence>
-          {transcript && !isProcessing && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              <div className="glass-card p-5 mb-4">
-                <h3 className="text-[13px] font-semibold text-accent uppercase tracking-wider mb-3">
-                  {t('transcript')}
-                </h3>
-                <p className="text-[15px] text-foreground leading-relaxed">{transcript}</p>
+          <motion.div variants={itemVariants} className="flex flex-col items-center justify-center py-12">
+            {isProcessing ? (
+              <div className="w-36 h-36 rounded-full bg-accent/20 flex items-center justify-center neon-glow-strong animate-pulse">
+                <Loader2 className="w-14 h-14 text-accent animate-spin" />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            ) : (
+              <div className="relative">
+                <MicButton 
+                  size="hero"
+                  isRecording={isRecording}
+                  onPressStart={startRecording}
+                  onPressEnd={stopRecording}
+                />
+                {isRecording && (
+                  <div className="absolute inset-0 rounded-full neon-glow-strong animate-pulse pointer-events-none" />
+                )}
+              </div>
+            )}
 
-        <motion.section variants={itemVariants} className="mt-8">
-          <div className="flex items-center gap-2 mb-4">
-            <MicIcon className="w-5 h-5 text-accent" />
-            <h2 className="text-[18px] font-bold text-foreground">{t('recentVoiceNotes')}</h2>
-          </div>
-          {voiceNotes.length > 0 ? (
-            <div className="space-y-3">
-              {voiceNotes.slice(0, 5).map((note) => {
-                const intent = voiceIntents.find(i => i.rawText === note.transcript);
-                return (
-                  <div key={`${note.id}-${note.createdAt}`} className="glass-card-hover glass-card p-4">
-                    <p className="text-[14px] text-foreground line-clamp-2 leading-relaxed mb-3">{note.transcript}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-accent font-medium">
-                        {format(new Date(note.createdAt), 'MMM d, h:mm a')}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {intent && (
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-semibold",
-                            intent.status === 'executed' && "bg-green-500/20 text-green-400",
-                            intent.status === 'scheduled' && "bg-amber-500/20 text-amber-400",
-                            intent.status === 'failed' && "bg-red-500/20 text-red-400"
-                          )}>
-                            {getStatusIcon(intent.status)}
-                            {t(`intent${intent.status.charAt(0).toUpperCase() + intent.status.slice(1)}` as 'intentExecuted' | 'intentScheduled' | 'intentFailed')}
-                          </span>
-                        )}
-                        {note.intent && (
-                          <IntentBadge intent={note.intent as IntentType} className="text-[11px] py-1 px-2.5" />
-                        )}
+            <motion.div
+              variants={itemVariants}
+              className="mt-8 flex flex-col items-center"
+            >
+              <Waveform isActive={isRecording} barCount={7} className="h-10 mb-4" />
+              <p className="text-[15px] text-muted-foreground font-medium">
+                {isProcessing && processingStatus ? processingStatus : isProcessing ? t('processing') : isRecording ? t('recording') : t('holdToRecord')}
+              </p>
+            </motion.div>
+          </motion.div>
+
+          <AnimatePresence>
+            {transcript && !isProcessing && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <div className="glass-card p-5 mb-4">
+                  <h3 className="text-[13px] font-semibold text-accent uppercase tracking-wider mb-3">
+                    {t('transcript')}
+                  </h3>
+                  <p className="text-[15px] text-foreground leading-relaxed">{transcript}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <motion.section variants={itemVariants} className="mt-8">
+            <div className="flex items-center gap-2 mb-4">
+              <MicIcon className="w-5 h-5 text-accent" />
+              <h2 className="text-[18px] font-bold text-foreground">{t('recentVoiceNotes')}</h2>
+            </div>
+            {voiceNotes.length > 0 ? (
+              <div className="space-y-3">
+                {voiceNotes.slice(0, 5).map((note) => {
+                  const intent = voiceIntents.find(i => i.rawText === note.transcript);
+                  return (
+                    <div key={`${note.id}-${note.createdAt}`} className="glass-card-hover glass-card p-4">
+                      <p className="text-[14px] text-foreground line-clamp-2 leading-relaxed mb-3">{note.transcript}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] text-accent font-medium">
+                          {format(new Date(note.createdAt), 'MMM d, h:mm a')}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {intent && (
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-semibold",
+                              intent.status === 'executed' && "bg-green-500/20 text-green-400",
+                              intent.status === 'scheduled' && "bg-amber-500/20 text-amber-400",
+                              intent.status === 'failed' && "bg-red-500/20 text-red-400"
+                            )}>
+                              {getStatusIcon(intent.status)}
+                              {t(`intent${intent.status.charAt(0).toUpperCase() + intent.status.slice(1)}` as 'intentExecuted' | 'intentScheduled' | 'intentFailed')}
+                            </span>
+                          )}
+                          {note.intent && (
+                            <IntentBadge intent={note.intent as IntentType} className="text-[11px] py-1 px-2.5" />
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="glass-card p-10 text-center">
-              <MicIcon className="w-14 h-14 text-accent/50 mx-auto mb-4" />
-              <p className="text-[15px] text-muted-foreground">{t('noVoiceNotes')}</p>
-            </div>
-          )}
-        </motion.section>
-      </motion.div>
-    </PageWrapper>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="glass-card p-10 text-center">
+                <MicIcon className="w-14 h-14 text-accent/50 mx-auto mb-4" />
+                <p className="text-[15px] text-muted-foreground">{t('noVoiceNotes')}</p>
+              </div>
+            )}
+          </motion.section>
+        </motion.div>
+      </PageWrapper>
+      <BottomNav />
+    </>
   );
 }

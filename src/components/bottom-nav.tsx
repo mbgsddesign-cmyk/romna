@@ -12,7 +12,7 @@ const baseNavItems = [
   { href: '/', icon: Home, labelKey: 'home' as const },
   { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
   { href: '/voice', icon: Mic, labelKey: 'voice' as const, isPrimary: true },
-  { href: '/settings', icon: User, labelKey: 'account' as const },
+  { href: '/account', icon: User, labelKey: 'account' as const },
 ];
 
 export function BottomNav() {

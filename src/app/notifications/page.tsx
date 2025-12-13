@@ -1,6 +1,7 @@
 'use client';
 
 import { PageWrapper } from '@/components/page-wrapper';
+import { BottomNav } from '@/components/bottom-nav';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
 import { 
@@ -174,106 +175,109 @@ export default function NotificationsPage() {
   const hasActions = scheduledPlans.length > 0 || waitingApproval.length > 0 || failedPlans.length > 0;
 
   return (
-    <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#f6f8f7] dark:bg-[#112117] text-foreground font-sans">
-      {/* Header */}
-      <header className="flex items-center p-6 pb-4 justify-between shrink-0 z-20">
-        <button 
-          onClick={() => router.back()}
-          className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h2 className="text-white text-xl font-bold leading-tight tracking-tight">
-          {locale === 'ar' ? 'صندوق التنفيذ' : 'Execution Inbox'}
-        </h2>
-        <button
-          onClick={fetchPlans}
-          className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
-      </header>
+    <>
+      <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#f6f8f7] dark:bg-[#112117] text-foreground font-sans">
+        {/* Header */}
+        <header className="flex items-center p-6 pb-4 justify-between shrink-0 z-20">
+          <button 
+            onClick={() => router.back()}
+            className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <h2 className="text-white text-xl font-bold leading-tight tracking-tight">
+            {locale === 'ar' ? 'صندوق التنفيذ' : 'Execution Inbox'}
+          </h2>
+          <button
+            onClick={fetchPlans}
+            className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-4 z-0">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <RefreshCw className="w-8 h-8 text-accent animate-spin" />
-          </div>
-        ) : !hasActions ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <CheckCircle className="w-16 h-16 text-accent/30 mb-4" />
-            <p className="text-white/60 text-sm">
-              {locale === 'ar' 
-                ? 'لا توجد إجراءات قادمة أو موافقات مطلوبة.' 
-                : 'No upcoming actions or approvals.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Waiting Approval */}
-            {waitingApproval.length > 0 && (
-              <>
-                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2">
-                  {locale === 'ar' ? 'في انتظار الموافقة' : 'Needs Approval'}
-                </h3>
-                {waitingApproval.map(plan => (
-                  <ExecutionCard
-                    key={plan.id}
-                    plan={plan}
-                    locale={locale}
-                    actionLoading={actionLoading === plan.id}
-                    onApprove={() => handleApprove(plan.id)}
-                    onCancel={() => handleCancel(plan.id)}
-                  />
-                ))}
-              </>
-            )}
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-4 z-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-8 h-8 text-accent animate-spin" />
+            </div>
+          ) : !hasActions ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <CheckCircle className="w-16 h-16 text-accent/30 mb-4" />
+              <p className="text-white/60 text-sm">
+                {locale === 'ar' 
+                  ? 'لا توجد إجراءات قادمة أو موافقات مطلوبة.' 
+                  : 'No upcoming actions or approvals.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Waiting Approval */}
+              {waitingApproval.length > 0 && (
+                <>
+                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2">
+                    {locale === 'ar' ? 'في انتظار الموافقة' : 'Needs Approval'}
+                  </h3>
+                  {waitingApproval.map(plan => (
+                    <ExecutionCard
+                      key={plan.id}
+                      plan={plan}
+                      locale={locale}
+                      actionLoading={actionLoading === plan.id}
+                      onApprove={() => handleApprove(plan.id)}
+                      onCancel={() => handleCancel(plan.id)}
+                    />
+                  ))}
+                </>
+              )}
 
-            {/* Scheduled */}
-            {scheduledPlans.length > 0 && (
-              <>
-                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
-                  {locale === 'ar' ? 'مجدول' : 'Scheduled'}
-                </h3>
-                {scheduledPlans.map(plan => (
-                  <ExecutionCard
-                    key={plan.id}
-                    plan={plan}
-                    locale={locale}
-                    actionLoading={actionLoading === plan.id}
-                    onCancel={() => handleCancel(plan.id)}
-                  />
-                ))}
-              </>
-            )}
+              {/* Scheduled */}
+              {scheduledPlans.length > 0 && (
+                <>
+                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
+                    {locale === 'ar' ? 'مجدول' : 'Scheduled'}
+                  </h3>
+                  {scheduledPlans.map(plan => (
+                    <ExecutionCard
+                      key={plan.id}
+                      plan={plan}
+                      locale={locale}
+                      actionLoading={actionLoading === plan.id}
+                      onCancel={() => handleCancel(plan.id)}
+                    />
+                  ))}
+                </>
+              )}
 
-            {/* Failed */}
-            {failedPlans.length > 0 && (
-              <>
-                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
-                  {locale === 'ar' ? 'فشل' : 'Failed'}
-                </h3>
-                {failedPlans.map(plan => (
-                  <ExecutionCard
-                    key={plan.id}
-                    plan={plan}
-                    locale={locale}
-                    actionLoading={actionLoading === plan.id}
-                    onRetry={() => handleRetry(plan.id)}
-                    onCancel={() => handleCancel(plan.id)}
-                  />
-                ))}
-              </>
-            )}
-          </>
-        )}
+              {/* Failed */}
+              {failedPlans.length > 0 && (
+                <>
+                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
+                    {locale === 'ar' ? 'فشل' : 'Failed'}
+                  </h3>
+                  {failedPlans.map(plan => (
+                    <ExecutionCard
+                      key={plan.id}
+                      plan={plan}
+                      locale={locale}
+                      actionLoading={actionLoading === plan.id}
+                      onRetry={() => handleRetry(plan.id)}
+                      onCancel={() => handleCancel(plan.id)}
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Background Gradient */}
+        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#112117] to-transparent pointer-events-none z-10"></div>
+        <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#112117] via-[#112117]/80 to-transparent pointer-events-none z-10"></div>
       </div>
-
-      {/* Background Gradient */}
-      <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#112117] to-transparent pointer-events-none z-10"></div>
-      <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#112117] via-[#112117]/80 to-transparent pointer-events-none z-10"></div>
-    </div>
+      <BottomNav />
+    </>
   );
 }
 

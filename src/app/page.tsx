@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import { BottomNav } from '@/components/bottom-nav';
 
 interface Task {
   id: string;
@@ -225,47 +226,7 @@ export default function HomePage() {
         <span className="material-symbols-outlined animate-rotate-slow group-hover:text-white transition-colors">smart_toy</span>
       </button>
 
-      <nav className="fixed bottom-0 left-0 w-full z-50">
-        <div className="absolute bottom-0 w-full h-32 pointer-events-none" style={{
-          background: 'linear-gradient(to top, #09140f, rgba(9, 20, 15, 0.95), transparent)'
-        }}></div>
-        <div className="relative border-t pb-8 pt-2 px-6" style={{
-          backgroundColor: 'rgba(9, 20, 15, 0.8)',
-          backdropFilter: 'blur(24px)',
-          borderColor: 'rgba(255, 255, 255, 0.05)'
-        }}>
-          <div className="flex items-end justify-between">
-            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group">
-              <span className="material-symbols-outlined group-hover:scale-110 transition-transform" style={{ color: '#f9f506' }}>home_app_logo</span>
-              <div className="w-1 h-1 rounded-full" style={{
-                backgroundColor: '#f9f506',
-                boxShadow: '0 0 5px #f9f506'
-              }}></div>
-            </div>
-            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
-              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">search</span>
-              <div className="w-1 h-1 rounded-full bg-transparent"></div>
-            </div>
-            <div className="relative -top-5 cursor-pointer group">
-              <div className="absolute inset-0 rounded-full blur-xl" style={{ backgroundColor: 'rgba(249, 245, 6, 0.2)' }}></div>
-              <div className="relative w-16 h-16 rounded-full border flex items-center justify-center shadow-lg transition-transform duration-200 group-active:scale-95" style={{
-                background: 'linear-gradient(to bottom right, #1a2921, black)',
-                borderColor: 'rgba(249, 245, 6, 0.3)'
-              }}>
-                <span className="material-symbols-outlined text-3xl group-hover:animate-pulse" style={{ color: '#f9f506' }}>mic</span>
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
-              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">calendar_month</span>
-              <div className="w-1 h-1 rounded-full bg-transparent"></div>
-            </div>
-            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
-              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">settings</span>
-              <div className="w-1 h-1 rounded-full bg-transparent"></div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

@@ -53,178 +53,91 @@ export default function HomePage() {
   const activeTask = decision?.active_task;
   const hasActiveTask = !!activeTask;
 
+  // Zen Mode Logic: If no active task, show "Focus" prompt
+  const displayTask = hasActiveTask ? activeTask : {
+    title: "Ready to Focus?",
+    description: "Tap the voice button to start your session.",
+    state: "Idle",
+    ai_priority: 0,
+    ai_reason: "Awaiting your command."
+  };
+
   const calendarEvents = [...todayTasks.slice(0, 2), ...tomorrowTasks.slice(0, 2)];
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden pb-24" style={{ background: '#09140f' }}>
-      <header className="pt-12 pb-2 px-6 flex flex-col items-start justify-end z-10">
-        <h1 className="text-3xl font-bold tracking-tight text-white mb-0.5">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-void pb-24 font-sans selection:bg-volt selection:text-black">
+      {/* 1. Header: Invisible Watermark */}
+      <header className="absolute top-0 left-0 w-full p-6 z-10 flex justify-between items-center opacity-50">
+        <h1 className="text-sm font-bold tracking-[0.2em] text-white/30 font-space uppercase">
           ROMNA
-          <span className="inline-block w-2 h-2 ml-1 rounded-full mb-1" style={{ backgroundColor: '#f9f506', boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)' }}></span>
         </h1>
-        <p className="text-gray-400 text-sm font-light tracking-wide opacity-80 uppercase">AI Decision Center</p>
+        <div className="h-2 w-2 rounded-full bg-volt/50 animate-pulse"></div>
       </header>
 
-      <main className="flex-1 px-4 space-y-6 overflow-y-auto no-scrollbar pb-10">
-        {hasActiveTask && (
-          <div className="group relative w-full rounded-[2.5rem] p-1 transition-transform duration-300 active:scale-[0.99]" style={{ 
-            backgroundColor: '#121e18',
-            boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.5)'
-          }}>
-            <div className="absolute inset-0 rounded-[2.5rem] pointer-events-none" style={{
-              background: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent)'
-            }}></div>
+      <main className="flex-1 flex flex-col items-center justify-center px-6 relative z-0">
+        
+        {/* 2. Center Stage: Active Decision Card */}
+        <div className="relative w-full max-w-md aspect-[3/4] max-h-[65vh] rounded-hyper bg-obsidian border border-white/5 shadow-2xl shadow-black/50 overflow-hidden flex flex-col animate-breathe group">
+          
+          {/* Ambient Glow */}
+          <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle_at_center,rgba(217,253,0,0.03)_0%,transparent_50%)] pointer-events-none group-hover:opacity-100 transition-opacity duration-1000"></div>
+
+          {/* Card Content */}
+          <div className="flex-1 flex flex-col justify-center items-center p-8 text-center z-10">
+            {hasActiveTask && (
+               <div className="mb-6 px-3 py-1 rounded-full border border-volt/20 bg-volt/5 text-volt text-[10px] font-bold tracking-widest uppercase font-space animate-pulse">
+                 Current Directive
+               </div>
+            )}
             
-            <div className="relative flex flex-col h-full rounded-[2.2rem] p-6 overflow-hidden" style={{ backgroundColor: '#121e18' }}>
-              <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl" style={{ backgroundColor: 'rgba(249, 245, 6, 0.05)' }}></div>
-              
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm tracking-wider animate-pulse" style={{ color: '#f9f506' }}>NOW</span>
-                  <div className="h-1.5 w-1.5 rounded-full" style={{ 
-                    backgroundColor: '#f9f506',
-                    boxShadow: '0 0 8px rgba(249, 245, 6, 0.8)' 
-                  }}></div>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-400 font-medium border rounded-full px-3 py-1" style={{
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
-                }}>
-                  <span>Focus Mode</span>
-                </div>
-              </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-white leading-[1.1] mb-6 font-space tracking-tight">
+              {displayTask.title}
+            </h2>
+            
+            {displayTask.ai_reason && (
+              <p className="text-sm text-gray-400 max-w-[260px] leading-relaxed font-light">
+                {displayTask.ai_reason}
+              </p>
+            )}
+          </div>
 
-              <div className="flex flex-col gap-4 mb-6">
-                <div className="flex items-start gap-4">
-                  <div className="mt-1 p-2 rounded-full text-white ring-1" style={{
-                    backgroundColor: '#1a2921',
-                    ringColor: 'rgba(255, 255, 255, 0.1)'
-                  }}>
-                    <span className="material-symbols-outlined material-symbols-outlined-fill">notifications_active</span>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold leading-tight text-white mb-2">{activeTask.title}</h2>
-                    <div className="flex flex-wrap gap-2">
-                      {activeTask.ai_priority >= 80 && (
-                        <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-black" style={{
-                          backgroundColor: 'rgba(249, 245, 6, 0.9)'
-                        }}>
-                          <span className="material-symbols-outlined text-[16px] font-bold">flag</span>
-                          <span className="text-[10px] font-bold uppercase">High Priority</span>
-                        </div>
-                      )}
-                      <div className="inline-flex items-center gap-1 border px-3 py-1 rounded-full text-gray-300" style={{
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)'
-                      }}>
-                        <span className="text-[10px] font-medium uppercase tracking-wide">{activeTask.state}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {activeTask.ai_reason && (
-                  <div className="flex items-center gap-3 mt-1 pl-14">
-                    <span className="material-symbols-outlined text-gray-500 text-[18px]">psychology</span>
-                    <p className="text-sm text-gray-400 font-light">{activeTask.ai_reason}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-auto space-y-4">
-                <button className="relative w-full h-14 rounded-full flex items-center justify-center text-black font-bold text-lg tracking-wide overflow-hidden group/btn" style={{
-                  backgroundColor: '#f9f506',
-                  boxShadow: '0 0 20px rgba(249, 245, 6, 0.25)',
-                  animation: 'pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-                }}>
-                  <div className="absolute inset-0 scale-x-0 group-hover/btn:scale-x-100 transition-transform duration-500 origin-left" style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.3)'
-                  }}></div>
-                  <span className="relative z-10 flex items-center gap-2">
-                    <span className="material-symbols-outlined">play_arrow</span>
-                    Execute
+          {/* 3. The Action: Massive Execute Slide-Button */}
+          <div className="p-4 bg-gradient-to-t from-black/80 to-transparent">
+             {hasActiveTask ? (
+               <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.2)]">
+                  <span className="relative z-10 flex items-center justify-center gap-3">
+                    <span className="material-symbols-outlined text-[28px]">play_circle</span>
+                    EXECUTE
                   </span>
-                </button>
-                
-                <div className="flex justify-center gap-8 opacity-80">
-                  <button className="text-xs font-medium text-gray-400 hover:text-[#f9f506] transition-colors flex items-center gap-1.5 py-2 px-4 rounded-full hover:bg-white/5">
-                    <span className="material-symbols-outlined text-[16px]">snooze</span>
-                    Snooze
-                  </button>
-                  <button className="text-xs font-medium text-gray-400 hover:text-[#f9f506] transition-colors flex items-center gap-1.5 py-2 px-4 rounded-full hover:bg-white/5">
-                    <span className="material-symbols-outlined text-[16px]">tune</span>
-                    Adjust
-                  </button>
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[24px]"></div>
+               </button>
+             ) : (
+                <div className="w-full h-20 flex items-center justify-center text-gray-500 text-sm font-space tracking-widest uppercase opacity-50">
+                   System Idle
                 </div>
-              </div>
-            </div>
+             )}
           </div>
-        )}
+        </div>
 
-        {hasActiveTask && calendarEvents.length > 0 && (
-          <div className="border rounded-3xl p-5 space-y-3" style={{
-            backgroundColor: '#121e18',
-            borderColor: 'rgba(255, 255, 255, 0.05)'
-          }}>
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-              Today &amp; Tomorrow
-            </h3>
-            <div className="space-y-2">
-              {calendarEvents.slice(0, 2).map((task) => {
-                const isRelated = task.id === activeTask?.id || (activeTask?.title && task.title.toLowerCase().includes(activeTask.title.toLowerCase()));
-                return (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-3 p-3 rounded-xl border transition-opacity"
-                    style={{
-                      backgroundColor: 'rgba(26, 41, 33, 0.3)',
-                      borderColor: 'rgba(255, 255, 255, 0.05)',
-                      opacity: isRelated ? 1 : 0.6
-                    }}
-                  >
-                    <div className="w-1 h-10 rounded-full" style={{
-                      backgroundColor: task.priority === 'high' ? '#f9f506' : 'rgba(255, 255, 255, 0.2)'
-                    }}></div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-white">{task.title}</p>
-                      {task.due_date && (
-                        <p className="text-xs text-gray-500">{format(parseISO(task.due_date), 'h:mm a')}</p>
-                      )}
-                      {isRelated && (
-                        <p className="text-[10px] text-[#f9f506] mt-0.5">Related to current focus</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* 4. Context: Subtle Timeline Strip */}
+        <div className="mt-10 w-full max-w-md flex items-center justify-center gap-6 opacity-60">
+           {calendarEvents.length > 0 ? (
+             calendarEvents.map((task, i) => (
+                <div key={task.id} className="flex flex-col items-center gap-2 group/event cursor-default">
+                   <div className={`w-2 h-2 rounded-full transition-all duration-300 ${i === 0 ? 'bg-white shadow-[0_0_10px_white]' : 'bg-white/20'}`}></div>
+                   <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium opacity-0 group-hover/event:opacity-100 transition-opacity absolute translate-y-4">
+                      {format(parseISO(task.due_date!), 'h:mm a')}
+                   </span>
+                </div>
+             ))
+           ) : (
+              <span className="text-[10px] text-gray-600 uppercase tracking-widest">No upcoming events</span>
+           )}
+           {/* Timeline Line */}
+           <div className="absolute w-32 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent -z-10"></div>
+        </div>
 
-        {!hasActiveTask && (
-          <div className="border rounded-3xl p-8 text-center space-y-2" style={{
-            backgroundColor: '#121e18',
-            borderColor: 'rgba(255, 255, 255, 0.05)'
-          }}>
-            <span className="material-symbols-outlined text-4xl" style={{ color: 'rgba(249, 245, 6, 0.3)' }}>calendar_today</span>
-            <p className="text-sm text-gray-500">Calendar activates when a decision exists.</p>
-            <p className="text-sm text-gray-500" dir="rtl">يظهر الجدول عند وجود قرار نشط فقط.</p>
-          </div>
-        )}
-
-        <div className="h-24"></div>
       </main>
-
-      <button className="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full border flex items-center justify-center group active:scale-90 transition-all duration-300" style={{
-        backgroundColor: '#1a2921',
-        borderColor: 'rgba(249, 245, 6, 0.2)',
-        boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)',
-        color: '#f9f506'
-      }}>
-        <span className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ backgroundColor: 'rgba(249, 245, 6, 0.05)' }}></span>
-        <span className="material-symbols-outlined animate-rotate-slow group-hover:text-white transition-colors">smart_toy</span>
-      </button>
 
       <BottomNav />
     </div>

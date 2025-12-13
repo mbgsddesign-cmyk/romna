@@ -1,92 +1,60 @@
 'use client';
 
-import { Home, CheckSquare, Calendar, Mic, Settings, Shield, Bell, TrendingUp, User } from 'lucide-react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useTranslation } from '@/hooks/use-translation';
-import { useAuth } from '@/lib/auth-context';
-import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-
-const baseNavItems = [
-  { href: '/', icon: Home, labelKey: 'home' as const },
-  { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
-  { href: '/voice', icon: Mic, labelKey: 'voice' as const, isPrimary: true },
-  { href: '/account', icon: User, labelKey: 'account' as const },
-];
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { t } = useTranslation();
-  const { isAdmin } = useAuth();
+  
+  // Hide on auth pages
+  if (pathname.startsWith('/auth')) return null;
 
-  if (pathname.startsWith('/auth') || pathname.startsWith('/admin')) {
-    return null;
-  }
+  const navItems = [
+    { href: '/', icon: 'home', label: 'Home' },
+    { href: '/voice', icon: 'mic', label: 'Voice', isMain: true },
+    { href: '/notifications', icon: 'inbox', label: 'Inbox' },
+  ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-xl border-t border-border safe-area-bottom">
-      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
-        {baseNavItems.map((item) => {
+    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <nav className="pointer-events-auto bg-obsidian backdrop-blur-xl border border-white/10 rounded-[2rem] px-6 py-3 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-8">
+        {navItems.map((item) => {
           const isActive = pathname === item.href;
-          const isPrimary = item.isPrimary;
           
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "relative flex flex-col items-center justify-center h-full",
-                isPrimary ? "flex-[1.2]" : "flex-1"
-              )}
-            >
-              <motion.div
-                className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-xl transition-colors relative',
-                  isPrimary && 'p-3',
-                  !isPrimary && 'p-2',
+          if (item.isMain) {
+            return (
+              <Link key={item.href} href={item.href} className="relative group">
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
                   isActive 
-                    ? 'text-primary dark:text-accent' 
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-                whileTap={{ scale: 0.9 }}
-              >
-                <div className={cn(
-                  "relative rounded-xl transition-all duration-200 flex items-center justify-center",
-                  isPrimary ? "p-3 bg-accent text-accent-foreground neon-glow" : "p-1.5",
-                  isActive && !isPrimary && "bg-primary/10 dark:bg-accent/10"
-                )}>
-                  <item.icon className={cn(
-                    isPrimary ? "w-7 h-7" : "w-5 h-5"
-                  )} strokeWidth={isActive ? 2.5 : 1.8} />
-                  {isActive && !isPrimary && (
-                    <motion.div
-                      layoutId="navGlow"
-                      className="absolute inset-0 bg-primary/20 dark:bg-accent/20 rounded-xl blur-md -z-10"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </div>
-                {!isPrimary && (
-                  <span className={cn(
-                    "text-[10px] transition-all duration-200",
-                    isActive ? "font-semibold" : "font-medium"
-                  )}>
-                    {t(item.labelKey)}
+                    ? 'bg-volt text-black scale-110 shadow-[0_0_20px_rgba(217,253,0,0.4)]' 
+                    : 'bg-white/10 text-white hover:bg-white/20'
+                }`}>
+                  <span className={`material-symbols-outlined text-[28px] ${isActive ? 'material-symbols-outlined-fill' : ''}`}>
+                    {item.icon}
                   </span>
-                )}
-                {isActive && !isPrimary && (
-                  <motion.div
-                    layoutId="activeIndicator"
-                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary dark:bg-accent"
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  />
-                )}
-              </motion.div>
+                </div>
+              </Link>
+            );
+          }
+
+          return (
+            <Link key={item.href} href={item.href} className="relative group flex flex-col items-center justify-center w-10 h-10">
+              <span className={`material-symbols-outlined transition-colors duration-300 ${
+                isActive ? 'text-white material-symbols-outlined-fill' : 'text-white/40 group-hover:text-white/80'
+              }`}>
+                {item.icon}
+              </span>
+              {isActive && (
+                <motion.div 
+                  layoutId="nav-dot"
+                  className="absolute -bottom-2 w-1 h-1 rounded-full bg-volt"
+                />
+              )}
             </Link>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 }

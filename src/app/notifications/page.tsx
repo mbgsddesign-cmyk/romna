@@ -1,26 +1,12 @@
 'use client';
 
-import { PageWrapper } from '@/components/page-wrapper';
 import { BottomNav } from '@/components/bottom-nav';
 import { useTranslation } from '@/hooks/use-translation';
-import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Mail,
-  MessageSquare,
-  Bell,
-  Calendar,
-  RefreshCw,
-  Edit
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
 
 interface ExecutionPlan {
   id: string;
@@ -32,7 +18,6 @@ interface ExecutionPlan {
   status: 'pending' | 'waiting_approval' | 'scheduled' | 'executed' | 'cancelled' | 'failed';
   payload: Record<string, any>;
   created_at: string;
-  executed_at?: string;
   error_message?: string;
 }
 
@@ -51,24 +36,12 @@ export default function NotificationsPage() {
         setLoading(false);
         return;
       }
-
-      const response = await fetch(`/api/execution/plans?userId=${user.id}`, {
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        setPlans([]);
-        return;
-      }
-
+      const response = await fetch(`/api/execution/plans?userId=${user.id}`, { cache: 'no-store' });
+      if (!response.ok) { setPlans([]); return; }
       const data = await response.json();
-      if (data.success && data.plans) {
-        setPlans(data.plans);
-      } else {
-        setPlans([]);
-      }
+      if (data.success && data.plans) setPlans(data.plans);
+      else setPlans([]);
     } catch (error) {
-      console.error('[Notifications] Failed to fetch execution plans:', error);
       setPlans([]);
     } finally {
       setLoading(false);
@@ -77,357 +50,147 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     fetchPlans();
-
-    const channel = supabase
-      .channel('execution_plans_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'execution_plans' },
-        () => fetchPlans()
-      )
+    const channel = supabase.channel('execution_plans_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'execution_plans' }, () => fetchPlans())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [fetchPlans]);
 
   const handleApprove = async (planId: string) => {
     if (actionLoading) return;
     setActionLoading(planId);
-
     try {
       const response = await fetch('/api/actions/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId }),
       });
-
-      if (response.ok) {
-        await fetchPlans();
-      }
-    } catch (error) {
-      console.error('Approve failed:', error);
-    } finally {
-      setActionLoading(null);
-    }
+      if (response.ok) await fetchPlans();
+    } catch (error) { console.error(error); } finally { setActionLoading(null); }
   };
 
   const handleCancel = async (planId: string) => {
     if (actionLoading) return;
     setActionLoading(planId);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from('execution_plans')
-        .update({ status: 'cancelled' })
-        .eq('id', planId)
-        .eq('user_id', user.id);
-
-      if (!error) {
-        await fetchPlans();
-      }
-    } catch (error) {
-      console.error('Cancel failed:', error);
-    } finally {
-      setActionLoading(null);
-    }
+      await supabase.from('execution_plans').update({ status: 'cancelled' }).eq('id', planId).eq('user_id', user.id);
+      await fetchPlans();
+    } catch (error) { console.error(error); } finally { setActionLoading(null); }
   };
 
-  const handleRetry = async (planId: string) => {
-    if (actionLoading) return;
-    setActionLoading(planId);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { error } = await supabase
-        .from('execution_plans')
-        .update({ 
-          status: 'scheduled',
-          error_message: null,
-          scheduled_for: new Date().toISOString(),
-        })
-        .eq('id', planId)
-        .eq('user_id', user.id);
-
-      if (!error) {
-        await fetchPlans();
-      }
-    } catch (error) {
-      console.error('Retry failed:', error);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const filterPlans = (status: ExecutionPlan['status'][]) => 
-    plans.filter(p => status.includes(p.status));
-
-  const scheduledPlans = filterPlans(['scheduled']);
-  const waitingApproval = filterPlans(['waiting_approval']);
-  const failedPlans = filterPlans(['failed']);
-
-  const hasActions = scheduledPlans.length > 0 || waitingApproval.length > 0 || failedPlans.length > 0;
+  // Group plans
+  const waitingApproval = plans.filter(p => p.status === 'waiting_approval');
+  const scheduled = plans.filter(p => p.status === 'scheduled');
+  const activePlans = [...waitingApproval, ...scheduled];
 
   return (
-    <>
-      <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#f6f8f7] dark:bg-[#112117] text-foreground font-sans">
-        {/* Header */}
-        <header className="flex items-center p-6 pb-4 justify-between shrink-0 z-20">
-          <button 
-            onClick={() => router.back()}
-            className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <h2 className="text-white text-xl font-bold leading-tight tracking-tight">
-            {locale === 'ar' ? 'صندوق التنفيذ' : 'Execution Inbox'}
-          </h2>
-          <button
-            onClick={fetchPlans}
-            className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
-        </header>
+    <div className="relative min-h-screen w-full bg-void pb-32 overflow-hidden flex flex-col font-sans selection:bg-volt selection:text-black">
+      
+      <header className="px-6 pt-12 pb-4">
+        <h1 className="text-2xl font-bold text-white font-space tracking-tight">
+           Inbox
+           <span className="text-volt text-3xl ml-1">.</span>
+        </h1>
+        <p className="text-white/40 text-xs font-medium uppercase tracking-widest mt-1">Action Center</p>
+      </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-4 z-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="w-8 h-8 text-accent animate-spin" />
-            </div>
-          ) : !hasActions ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <CheckCircle className="w-16 h-16 text-accent/30 mb-4" />
-              <p className="text-white/60 text-sm">
-                {locale === 'ar' 
-                  ? 'لا توجد إجراءات قادمة أو موافقات مطلوبة.' 
-                  : 'No upcoming actions or approvals.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Waiting Approval */}
-              {waitingApproval.length > 0 && (
-                <>
-                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2">
-                    {locale === 'ar' ? 'في انتظار الموافقة' : 'Needs Approval'}
-                  </h3>
-                  {waitingApproval.map(plan => (
-                    <ExecutionCard
-                      key={plan.id}
-                      plan={plan}
-                      locale={locale}
-                      actionLoading={actionLoading === plan.id}
-                      onApprove={() => handleApprove(plan.id)}
-                      onCancel={() => handleCancel(plan.id)}
+      <main className="flex-1 px-4 flex flex-col items-center">
+        {loading ? (
+           <div className="mt-20 w-8 h-8 rounded-full border-2 border-volt/20 border-t-volt animate-spin"></div>
+        ) : activePlans.length === 0 ? (
+           <div className="mt-32 flex flex-col items-center text-center opacity-40">
+              <div className="w-16 h-1 bg-white/10 rounded-full mb-4"></div>
+              <p className="text-white/50 font-space text-lg">All caught up.</p>
+              <p className="text-white/20 text-xs mt-2">Nothing requires your attention.</p>
+           </div>
+        ) : (
+           <div className="w-full max-w-md space-y-4 mt-4">
+              <AnimatePresence>
+                 {activePlans.map((plan, index) => (
+                    <ExecutionCard 
+                       key={plan.id} 
+                       plan={plan} 
+                       index={index}
+                       onApprove={() => handleApprove(plan.id)}
+                       onCancel={() => handleCancel(plan.id)}
+                       loading={actionLoading === plan.id}
                     />
-                  ))}
-                </>
-              )}
+                 ))}
+              </AnimatePresence>
+           </div>
+        )}
+      </main>
 
-              {/* Scheduled */}
-              {scheduledPlans.length > 0 && (
-                <>
-                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
-                    {locale === 'ar' ? 'مجدول' : 'Scheduled'}
-                  </h3>
-                  {scheduledPlans.map(plan => (
-                    <ExecutionCard
-                      key={plan.id}
-                      plan={plan}
-                      locale={locale}
-                      actionLoading={actionLoading === plan.id}
-                      onCancel={() => handleCancel(plan.id)}
-                    />
-                  ))}
-                </>
-              )}
-
-              {/* Failed */}
-              {failedPlans.length > 0 && (
-                <>
-                  <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
-                    {locale === 'ar' ? 'فشل' : 'Failed'}
-                  </h3>
-                  {failedPlans.map(plan => (
-                    <ExecutionCard
-                      key={plan.id}
-                      plan={plan}
-                      locale={locale}
-                      actionLoading={actionLoading === plan.id}
-                      onRetry={() => handleRetry(plan.id)}
-                      onCancel={() => handleCancel(plan.id)}
-                    />
-                  ))}
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Background Gradient */}
-        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#112117] to-transparent pointer-events-none z-10"></div>
-        <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#112117] via-[#112117]/80 to-transparent pointer-events-none z-10"></div>
-      </div>
       <BottomNav />
-    </>
+    </div>
   );
 }
 
-function ExecutionCard({ 
-  plan, 
-  locale, 
-  actionLoading,
-  onApprove,
-  onRetry,
-  onCancel,
-}: {
-  plan: ExecutionPlan;
-  locale: string;
-  actionLoading: boolean;
-  onApprove?: () => void;
-  onRetry?: () => void;
-  onCancel?: () => void;
-}) {
-  const icon = getIconForType(plan.intent_type);
-  const Icon = icon;
-
-  const scheduledDate = new Date(plan.scheduled_for);
-  const formattedDate = scheduledDate.toLocaleString(
-    locale === 'ar' ? 'ar-EG' : 'en-US',
-    { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-  );
-
-  const title = plan.payload?.title || plan.payload?.subject || plan.payload?.message || 
-                (locale === 'ar' ? 'إجراء' : 'Action');
-
-  const isApprovalNeeded = plan.status === 'waiting_approval';
-  const isFailed = plan.status === 'failed';
-  const isScheduled = plan.status === 'scheduled';
-
+function ExecutionCard({ plan, index, onApprove, onCancel, loading }: any) {
+  const isApproval = plan.status === 'waiting_approval';
+  
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative w-full"
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ delay: index * 0.1 }}
+      className={`relative w-full rounded-2xl overflow-hidden border transition-all duration-300 ${
+         isApproval 
+           ? 'bg-obsidian border-volt/30 shadow-[0_0_20px_rgba(217,253,0,0.05)]' 
+           : 'bg-white/5 border-white/5 opacity-80'
+      }`}
     >
-      <div className={cn(
-        "flex flex-col gap-4 p-5 rounded-2xl shadow-lg border transition-all",
-        isApprovalNeeded && "bg-[#2d3b21] border-[#30e87a]/30",
-        isFailed && "bg-[#3b2121] border-red-500/30",
-        isScheduled && "bg-[#1A2C22] border-white/5"
-      )}>
-        {/* Header */}
-        <div className="flex items-start gap-4">
-          <div className={cn(
-            "flex items-center justify-center rounded-xl size-12 shrink-0",
-            isApprovalNeeded && "bg-[#30e87a]/20 text-[#30e87a]",
-            isFailed && "bg-red-500/20 text-red-400",
-            isScheduled && "bg-[#23362b] text-[#9db8a8]"
-          )}>
-            <Icon className="w-6 h-6" />
+       <div className="p-5 flex flex-col gap-4">
+          <div className="flex justify-between items-start">
+             <div>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md mb-2 inline-block ${
+                   isApproval ? 'bg-volt text-black' : 'bg-white/10 text-white/60'
+                }`}>
+                   {isApproval ? 'Approval Required' : 'Scheduled'}
+                </span>
+                <h3 className="text-white font-medium text-lg leading-tight mt-1">
+                   {plan.payload?.title || plan.payload?.subject || 'Unnamed Action'}
+                </h3>
+             </div>
+             {plan.intent_type && (
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/40">
+                   <span className="material-symbols-outlined text-[18px]">
+                      {plan.intent_type === 'email' ? 'mail' : 
+                       plan.intent_type === 'whatsapp' ? 'chat' : 'notifications'}
+                   </span>
+                </div>
+             )}
+          </div>
+          
+          <div className="flex items-center gap-2 text-white/30 text-xs font-mono">
+             <span>{format(new Date(plan.scheduled_for), 'MMM d, h:mm a')}</span>
+             <span>•</span>
+             <span className="capitalize">{plan.intent_type}</span>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <p className="text-white font-semibold text-base mb-1 truncate">{title}</p>
-            <div className="flex items-center gap-2 text-xs text-white/60">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{formattedDate}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Preview for Email/WhatsApp */}
-        {(plan.intent_type === 'email' || plan.intent_type === 'whatsapp') && plan.payload?.message && (
-          <div className="p-3 rounded-lg bg-black/20 border border-white/5">
-            <p className="text-white/80 text-sm line-clamp-3">{plan.payload.message}</p>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {isFailed && plan.error_message && (
-          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-            <p className="text-red-400 text-xs">{plan.error_message}</p>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2">
-          {isApprovalNeeded && onApprove && (
-            <>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                disabled={actionLoading}
-                onClick={onApprove}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#30e87a] text-[#052e16] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <CheckCircle className="w-4 h-4" />
-                {locale === 'ar' ? 'موافقة وتنفيذ' : 'Approve & Execute'}
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                disabled={actionLoading}
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
+             {isApproval && (
+                <button 
+                   disabled={loading}
+                   onClick={onApprove}
+                   className="flex-1 h-10 rounded-xl bg-volt text-black text-sm font-bold tracking-wide hover:bg-[#c2e200] active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                   {loading ? <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></span> : 'APPROVE'}
+                </button>
+             )}
+             <button 
+                disabled={loading}
                 onClick={onCancel}
-                className="px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50"
-              >
-                <XCircle className="w-4 h-4" />
-              </motion.button>
-            </>
-          )}
-
-          {isFailed && onRetry && (
-            <>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                disabled={actionLoading}
-                onClick={onRetry}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#30e87a] text-[#052e16] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                disabled={actionLoading}
-                onClick={onCancel}
-                className="px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50"
-              >
-                <XCircle className="w-4 h-4" />
-              </motion.button>
-            </>
-          )}
-
-          {isScheduled && onCancel && (
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              disabled={actionLoading}
-              onClick={onCancel}
-              className="w-full px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <XCircle className="w-4 h-4" />
-              {locale === 'ar' ? 'إلغاء' : 'Cancel'}
-            </motion.button>
-          )}
-        </div>
-      </div>
+                className={`h-10 px-4 rounded-xl border border-white/10 text-white/60 text-xs font-medium hover:bg-white/5 active:scale-95 transition-all ${!isApproval && 'flex-1'}`}
+             >
+                {isApproval ? 'Dismiss' : 'Cancel'}
+             </button>
+          </div>
+       </div>
     </motion.div>
   );
-}
-
-function getIconForType(type: string) {
-  switch (type) {
-    case 'email': return Mail;
-    case 'whatsapp': return MessageSquare;
-    case 'alarm': return Bell;
-    case 'reminder': return Calendar;
-    case 'notification': return AlertCircle;
-    default: return Bell;
-  }
 }

@@ -1,26 +1,19 @@
 'use client';
 
-import { PageWrapper } from '@/components/page-wrapper';
 import { BottomNav } from '@/components/bottom-nav';
 import { useTranslation } from '@/hooks/use-translation';
-import { useAppStore, IntentType } from '@/lib/store';
+import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Mic as MicIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { useState, useRef, useCallback } from 'react';
-import { format } from 'date-fns';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { MicButton, Waveform, IntentBadge, SectionHeader, EmptyState } from '@/components/romna';
-import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 
 export default function VoicePage() {
   const { t, locale } = useTranslation();
   const { user } = useAuth();
   const router = useRouter();
-  const { voiceNotes, voiceIntents, addVoiceNote, addVoiceIntent, updateVoiceIntent, addTask, addEvent } = useAppStore();
+  const { addVoiceNote, addVoiceIntent } = useAppStore();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -29,28 +22,22 @@ export default function VoicePage() {
   const chunksRef = useRef<Blob[]>([]);
   const recordingMimeTypeRef = useRef<string>('');
 
-  // Detect best supported MIME type for cross-browser compatibility
   const getSupportedMimeType = (): string => {
     const types = [
-      'audio/webm;codecs=opus',  // Chrome, Edge, Firefox (preferred)
-      'audio/mp4',                // Safari, iOS
-      'audio/webm',               // Fallback for older browsers
-      'audio/wav',                // Universal fallback
+      'audio/webm;codecs=opus',
+      'audio/mp4',
+      'audio/webm',
+      'audio/wav',
     ];
-    
     for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        return type;
-      }
+      if (MediaRecorder.isTypeSupported(type)) return type;
     }
-    
-    return ''; // Let browser choose default
+    return '';
   };
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
       const mimeType = getSupportedMimeType();
       const options = mimeType ? { mimeType } : undefined;
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -59,40 +46,24 @@ export default function VoicePage() {
       chunksRef.current = [];
       recordingMimeTypeRef.current = mediaRecorder.mimeType;
 
-      console.log('[Voice Recording] Started with MIME type:', mediaRecorder.mimeType);
-
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: recordingMimeTypeRef.current });
         stream.getTracks().forEach((track) => track.stop());
-        
-        console.log('[Voice Recording] Stopped. Blob size:', audioBlob.size, 'Type:', audioBlob.type);
-        
-        // Validate blob before processing
-        if (audioBlob.size === 0) {
-          toast.error(locale === 'ar' ? 'لم يتم تسجيل صوت' : 'No audio recorded');
-          return;
-        }
-        
+        if (audioBlob.size === 0) return;
         await processAudio(audioBlob);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err) {
-      console.error('[Voice Recording] Error:', err);
-      if (err instanceof Error && err.name === 'NotAllowedError') {
-        toast.error(locale === 'ar' ? 'تم رفض إذن الميكروفون' : 'Microphone permission denied');
-      } else {
-        toast.error(locale === 'ar' ? 'لم يمكن الوصول للميكروفون' : 'Could not access microphone');
-      }
+      console.error('Mic Error:', err);
+      toast.error('Microphone access denied');
     }
-  }, [locale]);
+  }, []);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -101,10 +72,15 @@ export default function VoicePage() {
     }
   }, [isRecording]);
 
+  const toggleRecording = () => {
+    if (isRecording) stopRecording();
+    else startRecording();
+  };
+
   const processAudio = async (audioBlob: Blob) => {
     setIsProcessing(true);
     setTranscript('');
-    setProcessingStatus(locale === 'ar' ? 'جاري التعرف على الصوت...' : 'Transcribing...');
+    setProcessingStatus(locale === 'ar' ? 'جاري الاستماع...' : 'Listening...');
 
     try {
       const formData = new FormData();
@@ -115,214 +91,125 @@ export default function VoicePage() {
         body: formData,
       });
 
-      if (!transcribeRes.ok) {
-        const errorData = await transcribeRes.json();
-        toast.error(locale === 'ar' 
-          ? `فشل التعرف على الصوت: ${errorData.error}` 
-          : `Speech recognition failed: ${errorData.error}`
-        );
-        throw new Error('Transcription failed');
-      }
+      if (!transcribeRes.ok) throw new Error('Transcription failed');
       
       const { transcript: text } = await transcribeRes.json();
       
       if (!text || text.trim() === '') {
-        toast.warning(locale === 'ar' ? 'لم يتم اكتشاف كلام - حاول مرة أخرى' : 'No speech detected - try again');
+        toast.warning('No speech detected');
         return;
       }
       
       setTranscript(text);
-      setProcessingStatus(locale === 'ar' ? 'جاري معالجة القرار...' : 'Processing decision...');
+      setProcessingStatus(locale === 'ar' ? 'جاري التفكير...' : 'Thinking...');
 
-      if (!user?.id) {
-        toast.error(locale === 'ar' ? 'المستخدم غير مسجل دخول' : 'User not authenticated');
-        return;
-      }
+      if (!user?.id) return;
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const decideRes = await fetch('/api/voice/decide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          transcript: text, 
-          locale, 
-          userId: user.id 
-        }),
+        body: JSON.stringify({ transcript: text, locale, userId: user.id }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!decideRes.ok) {
-        const errorData = await decideRes.json();
-        toast.error(errorData.error || (locale === 'ar' ? 'فشل معالجة الأمر' : 'Failed to process command'));
-        return;
+        throw new Error('Decision failed');
       }
       
-      const { success, decision, intent, action } = await decideRes.json();
+      const { success, action } = await decideRes.json();
       
       if (success) {
-        let successMessage = locale === 'ar' ? 'تم!' : 'Done!';
-        
-        if (action === 'create_task') {
-          successMessage = locale === 'ar' ? 'تم إنشاء المهمة!' : 'Task created!';
-        } else if (action === 'create_reminder') {
-          successMessage = locale === 'ar' ? 'تم إنشاء التذكير!' : 'Reminder created!';
-        } else if (action === 'update_decision') {
-          successMessage = locale === 'ar' ? 'تم تحديث القرار!' : 'Decision updated!';
-        }
-
-        toast.success(successMessage);
-
-        setTimeout(() => {
-          router.push('/');
-        }, 500);
+        toast.success(action === 'create_task' ? 'Task Created' : 'Done');
+        setTimeout(() => router.push('/'), 800);
       }
       
     } catch (err: any) {
       console.error('Processing error:', err);
-      
-      if (err.name === 'AbortError') {
-        toast.error(locale === 'ar' ? 'انتهت مهلة الطلب - حاول مرة أخرى' : 'Request timeout - try again');
-      } else if (err.message !== 'Transcription failed') {
-        toast.error(locale === 'ar' ? 'فشلت المعالجة - حاول مرة أخرى' : 'Processing failed. Try again.');
-      }
+      toast.error('Processing failed');
     } finally {
       setIsProcessing(false);
       setProcessingStatus('');
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'executed': return <CheckCircle className="w-3 h-3 text-green-500" />;
-      case 'scheduled': return <Clock className="w-3 h-3 text-amber-500" />;
-      case 'failed': return <AlertCircle className="w-3 h-3 text-red-500" />;
-      default: return null;
-    }
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 }
-  };
-
   return (
-    <>
-      <PageWrapper className="px-5">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <motion.header variants={itemVariants} className="pt-8 pb-6 text-center">
-            <h1 className="text-[32px] font-extrabold text-foreground mb-2">{t('voice')}</h1>
-            <p className="text-accent text-[14px] font-medium">
-              {locale === 'ar' ? 'اطلب أي شيء بصوتك' : 'Just speak your mind'}
-            </p>
-          </motion.header>
+    <div className="relative h-screen w-full bg-void overflow-hidden flex flex-col items-center justify-center">
+      
+      {/* Background Ambient */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(20,20,20,1)_0%,#050505_100%)] pointer-events-none"></div>
 
-          <motion.div variants={itemVariants} className="flex flex-col items-center justify-center py-12">
-            {isProcessing ? (
-              <div className="w-36 h-36 rounded-full bg-accent/20 flex items-center justify-center neon-glow-strong animate-pulse">
-                <Loader2 className="w-14 h-14 text-accent animate-spin" />
-              </div>
-            ) : (
-              <div className="relative">
-                <MicButton 
-                  size="hero"
-                  isRecording={isRecording}
-                  onPressStart={startRecording}
-                  onPressEnd={stopRecording}
-                />
-                {isRecording && (
-                  <div className="absolute inset-0 rounded-full neon-glow-strong animate-pulse pointer-events-none" />
-                )}
+      {/* Main Interactive Area */}
+      <div 
+        className="relative z-10 flex flex-col items-center justify-center w-full h-full cursor-pointer"
+        onClick={toggleRecording}
+      >
+        {/* THE ORB */}
+        <div className={`relative transition-all duration-700 ease-out ${isRecording ? 'w-[120vw] h-[120vw] opacity-100' : 'w-32 h-32 opacity-80'}`}>
+          <div className={`absolute inset-0 rounded-full bg-gradient-to-br from-volt to-[#bfff00] blur-[20px] transition-all duration-700 ${isRecording ? 'opacity-20 animate-pulse-slow' : 'opacity-10 animate-float'}`}></div>
+          
+          {/* Core Orb */}
+          <div className={`absolute inset-0 m-auto rounded-full bg-volt shadow-[0_0_50px_rgba(217,253,0,0.4)] transition-all duration-500 ${isRecording ? 'w-full h-full opacity-10 blur-[80px]' : 'w-16 h-16 opacity-100'}`}>
+            {!isRecording && !isProcessing && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-4 h-4 bg-black rounded-full opacity-50 animate-ping"></div>
               </div>
             )}
+          </div>
 
-            <motion.div
-              variants={itemVariants}
-              className="mt-8 flex flex-col items-center"
-            >
-              <Waveform isActive={isRecording} barCount={7} className="h-10 mb-4" />
-              <p className="text-[15px] text-muted-foreground font-medium">
-                {isProcessing && processingStatus ? processingStatus : isProcessing ? t('processing') : isRecording ? t('recording') : t('holdToRecord')}
-              </p>
-            </motion.div>
-          </motion.div>
+          {/* Liquid/Fluid Effect (simulated with multiple pulsing layers) */}
+          {isRecording && (
+            <>
+               <div className="absolute inset-0 rounded-full border border-volt/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
+               <div className="absolute inset-0 rounded-full border border-volt/5 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite_1s]"></div>
+            </>
+          )}
+        </div>
 
-          <AnimatePresence>
-            {transcript && !isProcessing && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                <div className="glass-card p-5 mb-4">
-                  <h3 className="text-[13px] font-semibold text-accent uppercase tracking-wider mb-3">
-                    {t('transcript')}
-                  </h3>
-                  <p className="text-[15px] text-foreground leading-relaxed">{transcript}</p>
-                </div>
-              </motion.div>
+        {/* Text / Transcript */}
+        <div className="absolute z-20 flex flex-col items-center gap-4 max-w-sm text-center px-6 pointer-events-none">
+          <AnimatePresence mode="wait">
+            {isProcessing ? (
+               <motion.div
+                 initial={{ opacity: 0, y: 10 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, y: -10 }}
+                 className="flex flex-col items-center gap-2"
+               >
+                 <span className="text-volt font-space text-lg tracking-widest uppercase animate-pulse">
+                   {processingStatus}
+                 </span>
+                 {transcript && (
+                   <p className="text-white/60 text-sm font-light italic">"{transcript}"</p>
+                 )}
+               </motion.div>
+            ) : isRecording ? (
+               <motion.div
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+               >
+                 <p className="text-white/80 font-space text-2xl font-light tracking-wide">Listening...</p>
+               </motion.div>
+            ) : (
+               <motion.div
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 transition={{ delay: 0.5 }}
+                 className="mt-32"
+               >
+                 <p className="text-white/30 text-xs font-space tracking-[0.2em] uppercase">Tap to Speak</p>
+               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+      </div>
 
-          <motion.section variants={itemVariants} className="mt-8">
-            <div className="flex items-center gap-2 mb-4">
-              <MicIcon className="w-5 h-5 text-accent" />
-              <h2 className="text-[18px] font-bold text-foreground">{t('recentVoiceNotes')}</h2>
-            </div>
-            {voiceNotes.length > 0 ? (
-              <div className="space-y-3">
-                {voiceNotes.slice(0, 5).map((note) => {
-                  const intent = voiceIntents.find(i => i.rawText === note.transcript);
-                  return (
-                    <div key={`${note.id}-${note.createdAt}`} className="glass-card-hover glass-card p-4">
-                      <p className="text-[14px] text-foreground line-clamp-2 leading-relaxed mb-3">{note.transcript}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] text-accent font-medium">
-                          {format(new Date(note.createdAt), 'MMM d, h:mm a')}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {intent && (
-                            <span className={cn(
-                              "inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-semibold",
-                              intent.status === 'executed' && "bg-green-500/20 text-green-400",
-                              intent.status === 'scheduled' && "bg-amber-500/20 text-amber-400",
-                              intent.status === 'failed' && "bg-red-500/20 text-red-400"
-                            )}>
-                              {getStatusIcon(intent.status)}
-                              {t(`intent${intent.status.charAt(0).toUpperCase() + intent.status.slice(1)}` as 'intentExecuted' | 'intentScheduled' | 'intentFailed')}
-                            </span>
-                          )}
-                          {note.intent && (
-                            <IntentBadge intent={note.intent as IntentType} className="text-[11px] py-1 px-2.5" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="glass-card p-10 text-center">
-                <MicIcon className="w-14 h-14 text-accent/50 mx-auto mb-4" />
-                <p className="text-[15px] text-muted-foreground">{t('noVoiceNotes')}</p>
-              </div>
-            )}
-          </motion.section>
-        </motion.div>
-      </PageWrapper>
       <BottomNav />
-    </>
+    </div>
   );
 }

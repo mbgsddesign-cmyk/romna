@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import { VisualEditsMessenger } from "orchids-visual-edits";
-import { Providers } from "@/components/providers";
-import { BottomNav } from "@/components/bottom-nav";
-import { AskRomnaButton } from "@/components/ask-romna-button";
-import { AskRomnaDrawer } from "@/components/ask-romna-drawer";
-import { Toaster } from "sonner";
+import { AuthProvider } from "@/lib/auth-context";
+import { AutoGLMDecisionProvider } from "@/contexts/autoglm-decision-context";
+import { Toaster } from 'sonner';
+
+const inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: '--font-space' });
 
 export const metadata: Metadata = {
   title: "ROMNA - AI Productivity Assistant",
@@ -23,11 +24,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F4F4F6" },
-    { media: "(prefers-color-scheme: dark)", color: "#0C0D0F" },
-  ],
+  themeColor: '#050505',
 };
 
 export default function RootLayout({
@@ -36,31 +33,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-      </head>
-      <body className="antialiased min-h-screen flex flex-col bg-background text-foreground" style={{ fontFamily: "'Spline Sans', sans-serif" }}>
-        <Providers>
-          <main className="flex-1">
+    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+      <body className={`${inter.className} antialiased min-h-screen bg-[#050505] text-white overflow-x-hidden selection:bg-[#D9FD00] selection:text-black`}>
+        <AuthProvider>
+          <AutoGLMDecisionProvider>
             {children}
-          </main>
-          <AskRomnaDrawer />
-          <Toaster 
-            position="top-center" 
-            richColors 
-            closeButton 
-            toastOptions={{
+            <Toaster position="top-center" toastOptions={{
               style: {
-                borderRadius: '14px',
-                fontFamily: 'var(--font-family)',
-              },
-            }}
-          />
-        </Providers>
-        <VisualEditsMessenger />
+                background: 'rgba(20, 20, 20, 0.9)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: 'white',
+              }
+            }} />
+          </AutoGLMDecisionProvider>
+        </AuthProvider>
       </body>
     </html>
   );

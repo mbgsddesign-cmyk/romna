@@ -32,6 +32,7 @@ export default function InsightsPage() {
   const { user, profile } = useAuth();
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [buttonLoading, setButtonLoading] = useState<string | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -94,6 +95,36 @@ export default function InsightsPage() {
       }
     };
   }, []);
+
+  const handleAIAction = async (action: string, input: string) => {
+    setButtonLoading(action);
+    try {
+      const response = await fetch('/api/autoglm/handle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input,
+          source: 'insights',
+          userId: user?.id,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.type === 'execute') {
+        // Show success toast (if you have toast installed)
+        console.log('[Insights] Action executed:', data.message);
+        setTimeout(() => window.location.reload(), 500);
+      } else if (data.type === 'error') {
+        console.error('[Insights] Action failed:', data.message);
+      }
+    } catch (error) {
+      console.error('[Insights] Action error:', error);
+    } finally {
+      setButtonLoading(null);
+    }
+  };
 
   const latestInsight = insights[0];
   const productivityScore = 66; // TODO: Calculate from real data
@@ -210,8 +241,12 @@ export default function InsightsPage() {
               </div>
             </div>
 
-            <button className="mt-1 flex w-full items-center justify-center rounded-full bg-accent py-3.5 text-sm font-bold text-accent-foreground shadow-[0_0_15px_rgba(48,232,122,0.3)] transition-colors hover:bg-accent/90">
-              Plan the rest of today
+            <button 
+              onClick={() => handleAIAction('plan_today', 'Plan the rest of my day based on my tasks and events')}
+              disabled={buttonLoading === 'plan_today'}
+              className="mt-1 flex w-full items-center justify-center rounded-full bg-accent py-3.5 text-sm font-bold text-accent-foreground shadow-[0_0_15px_rgba(48,232,122,0.3)] transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {buttonLoading === 'plan_today' ? 'Planning...' : 'Plan the rest of today'}
             </button>
           </div>
         </div>
@@ -228,13 +263,21 @@ export default function InsightsPage() {
               {latestInsight?.description || "Your morning is light — schedule 45 minutes of deep focus before noon."}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <button className="flex items-center gap-1.5 rounded-full bg-muted/50 px-4 py-2 text-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-muted">
+              <button 
+                onClick={() => handleAIAction('add_focus', 'Add a 45-minute focus block before noon')}
+                disabled={buttonLoading === 'add_focus'}
+                className="flex items-center gap-1.5 rounded-full bg-muted/50 px-4 py-2 text-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-muted disabled:opacity-50"
+              >
                 <Plus className="w-3.5 h-3.5" />
-                Add Focus Block
+                {buttonLoading === 'add_focus' ? 'Adding...' : 'Add Focus Block'}
               </button>
-              <button className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/30">
+              <button 
+                onClick={() => handleAIAction('remind', 'Remind me about this later')}
+                disabled={buttonLoading === 'remind'}
+                className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/30 disabled:opacity-50"
+              >
                 <Bell className="w-3.5 h-3.5" />
-                Remind Me Later
+                {buttonLoading === 'remind' ? 'Setting...' : 'Remind Me Later'}
               </button>
             </div>
           </div>

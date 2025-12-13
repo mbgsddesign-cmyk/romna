@@ -6,8 +6,11 @@ import { useAuth } from '@/lib/auth-context';
 export interface AIResponse {
   message: string;
   timestamp: Date;
+  type?: 'suggest' | 'question' | 'execute' | 'nothing' | 'error';
   intent?: string;
   suggestions?: string[];
+  action?: string;
+  result?: unknown;
 }
 
 interface RomnaAIContextValue {
@@ -32,12 +35,14 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/ai/chat', {
+      const response = await fetch('/api/autoglm/handle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          input: text,
+          source: 'ask-romna',
           userId: user?.id,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
 
@@ -50,14 +55,15 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
       
       const aiResponse: AIResponse = {
-        message: data.message || data.response || 'No response',
+        message: data.message || 'No response',
         timestamp: new Date(),
-        intent: data.intent,
-        suggestions: data.suggestions,
+        type: data.type,
+        action: data.action,
+        result: data.result,
       };
 
       setLastResponse(aiResponse);
-      console.log('[Ask ROMNA] AI response:', aiResponse.message.substring(0, 100));
+      console.log('[Ask ROMNA] AI response:', aiResponse.message);
       
       return aiResponse;
     } catch (error) {
@@ -66,6 +72,7 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
       const errorResponse: AIResponse = {
         message: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date(),
+        type: 'error',
       };
       
       setLastResponse(errorResponse);

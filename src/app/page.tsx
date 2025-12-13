@@ -18,7 +18,6 @@ export default function HomePage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [hasAnimated, setHasAnimated] = useState(false);
 
-  // Mark as animated after first render
   useEffect(() => {
     setHasAnimated(true);
   }, []);
@@ -158,6 +157,7 @@ export default function HomePage() {
           </motion.div>
         ) : (
           <>
+            {/* 1️⃣ DECISION CARD */}
             <motion.div variants={itemVariants} className="glass-card p-6 mb-6">
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="w-5 h-5 text-accent" />
@@ -246,27 +246,35 @@ export default function HomePage() {
               </div>
             </motion.div>
 
+            {/* 2️⃣ TODAY/TOMORROW TIMELINE */}
+            <TodayTomorrowTimeline 
+              activeTask={decision.active_task}
+              locale={locale}
+            />
+
+            {/* 3️⃣ CALENDAR STRIP */}
+            <CalendarStrip 
+              activeTask={decision.active_task}
+              locale={locale}
+            />
+
+            {/* 4️⃣ INSIGHTS (Minimized) */}
             {decision.recommendations && decision.recommendations.length > 0 && (
               <motion.div variants={itemVariants} className="glass-card p-5 mb-6">
-                <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-accent" />
-                  {locale === 'ar' ? 'توصيات اليوم' : "Today's Insights"}
+                <h3 className="text-[13px] font-bold text-muted-foreground mb-3 flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+                  {locale === 'ar' ? 'ملاحظات' : 'Insights'}
                 </h3>
                 <div className="space-y-2">
-                  {decision.recommendations.slice(0, 3).map((rec, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-[13px] text-muted-foreground">
-                      <ChevronRight className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                  {decision.recommendations.slice(0, 2).map((rec, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-[12px] text-muted-foreground">
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
                       <span>{rec}</span>
                     </div>
                   ))}
                 </div>
               </motion.div>
             )}
-
-            <DecisionScopedCalendar 
-              activeTask={decision.active_task}
-              locale={locale}
-            />
           </>
         )}
       </motion.div>
@@ -274,10 +282,9 @@ export default function HomePage() {
   );
 }
 
-function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; locale: string }) {
+function TodayTomorrowTimeline({ activeTask, locale }: { activeTask: any; locale: string }) {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const taskId = activeTask?.id; // Extract stable ID
 
   useEffect(() => {
     let isMounted = true;
@@ -293,7 +300,7 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
 
         const today = new Date();
         const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setDate(tomorrow.getDate() + 2);
         tomorrow.setHours(23, 59, 59, 999);
 
         const { data, error } = await supabase
@@ -319,53 +326,174 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
     return () => {
       isMounted = false;
     };
-  }, [taskId]); // Use stable taskId
+  }, [activeTask?.id]);
 
   if (loading) return null;
-  
-  if (events.length === 0 && activeTask) {
-    return (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-5 mb-6"
-      >
-        <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-accent" />
-          {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
-        </h3>
-        <div className="text-center py-4">
-          <p className="text-[13px] text-muted-foreground">
-            {locale === 'ar' 
-              ? 'لا توجد أحداث مجدولة. ركز على المهمة النشطة.' 
-              : 'No scheduled events. Focus on the active task.'}
-          </p>
-        </div>
-      </motion.div>
-    );
-  }
 
-  if (!activeTask) {
-    return (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-5 mb-6"
-      >
-        <h3 className="text-[14px] font-bold text-muted-foreground mb-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
-          {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
-        </h3>
-        <div className="text-center py-4">
-          <p className="text-[12px] text-muted-foreground/60">
-            {locale === 'ar' 
-              ? 'الجدول يظهر عندما يوجد قرار نشط' 
-              : 'Calendar activates when a decision exists'}
-          </p>
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const todayEvents = events.filter(e => {
+    const eventDate = new Date(e.start_time);
+    return eventDate.toDateString() === today.toDateString();
+  });
+
+  const tomorrowEvents = events.filter(e => {
+    const eventDate = new Date(e.start_time);
+    return eventDate.toDateString() === tomorrow.toDateString();
+  });
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-card p-5 mb-6"
+    >
+      <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
+        <Clock className="w-4 h-4 text-accent" />
+        {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
+      </h3>
+      
+      <div className="grid grid-cols-2 gap-3">
+        {/* Today */}
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold text-accent uppercase tracking-wide">
+            {locale === 'ar' ? 'اليوم' : 'Today'}
+          </div>
+          {todayEvents.length > 0 ? (
+            <div className="space-y-2">
+              {todayEvents.slice(0, 2).map((event) => (
+                <div 
+                  key={event.id}
+                  className="p-2.5 rounded-[10px] bg-accent/10 border border-accent/20"
+                >
+                  <p className="text-[12px] font-semibold text-foreground mb-0.5 truncate">
+                    {event.title}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(event.start_time).toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 rounded-[10px] bg-muted/20 border border-muted/30">
+              <p className="text-[11px] text-muted-foreground">
+                {locale === 'ar' ? 'وقت فراغ' : 'Free time'}
+              </p>
+              <p className="text-[10px] text-accent mt-1">
+                {locale === 'ar' ? 'وقت جيد للتركيز' : 'Good time for focus'}
+              </p>
+            </div>
+          )}
         </div>
-      </motion.div>
-    );
-  }
+
+        {/* Tomorrow */}
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
+            {locale === 'ar' ? 'غدًا' : 'Tomorrow'}
+          </div>
+          {tomorrowEvents.length > 0 ? (
+            <div className="space-y-2">
+              {tomorrowEvents.slice(0, 2).map((event) => (
+                <div 
+                  key={event.id}
+                  className="p-2.5 rounded-[10px] bg-muted/20 border border-muted/30"
+                >
+                  <p className="text-[12px] font-semibold text-foreground mb-0.5 truncate">
+                    {event.title}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(event.start_time).toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 rounded-[10px] bg-muted/20 border border-muted/30">
+              <p className="text-[11px] text-muted-foreground">
+                {locale === 'ar' ? 'وقت فراغ' : 'Free time'}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
+                {locale === 'ar' ? 'احجز وقت تركيز؟' : 'Block focus time?'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function CalendarStrip({ activeTask, locale }: { activeTask: any; locale: string }) {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchEvents = async () => {
+      if (!isMounted) return;
+      
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user || !isMounted) return;
+
+        const today = new Date();
+        const threeDaysOut = new Date(today);
+        threeDaysOut.setDate(threeDaysOut.getDate() + 3);
+
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('start_time', today.toISOString())
+          .lte('start_time', threeDaysOut.toISOString())
+          .order('start_time');
+
+        if (!error && data && isMounted) {
+          setEvents(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch events:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchEvents();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTask?.id]);
+
+  if (loading) return null;
+
+  const today = new Date();
+  const next3Days = Array.from({ length: 3 }, (_, i) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    return date;
+  });
+
+  const getEventsForDay = (date: Date) => {
+    return events.filter(e => {
+      const eventDate = new Date(e.start_time);
+      return eventDate.toDateString() === date.toDateString();
+    });
+  };
+
+  const hasAnyEvents = events.length > 0;
 
   return (
     <motion.div 
@@ -375,48 +503,71 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
     >
       <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
         <Calendar className="w-4 h-4 text-accent" />
-        {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
+        {locale === 'ar' ? 'الأيام القادمة' : 'Next Days'}
       </h3>
       
-      <div className="space-y-2">
-        {events.map((event) => {
-          const eventTime = new Date(event.start_time);
-          const isRelated = event.title?.toLowerCase().includes(activeTask.title?.toLowerCase().split(' ')[0]) || 
-                           event.description?.toLowerCase().includes(activeTask.title?.toLowerCase().split(' ')[0]);
-          
-          return (
-            <div 
-              key={event.id}
-              className={cn(
-                "p-3 rounded-[12px] border transition-all",
-                isRelated 
-                  ? "bg-accent/10 border-accent/30" 
-                  : "bg-muted/20 border-muted/30 opacity-60"
-              )}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className={cn(
-                  "text-[13px] font-semibold",
-                  isRelated ? "text-accent" : "text-muted-foreground"
+      {!hasAnyEvents ? (
+        <div className="text-center py-3">
+          <p className="text-[13px] text-foreground mb-1">
+            {locale === 'ar' 
+              ? 'جدولك مفتوح.' 
+              : 'Your schedule is open.'}
+          </p>
+          <p className="text-[12px] text-muted-foreground">
+            {locale === 'ar' 
+              ? 'ROMNA يوصي بالتركيز أو الراحة.' 
+              : 'ROMNA recommends focus or rest.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {next3Days.map((date, idx) => {
+            const dayEvents = getEventsForDay(date);
+            const isToday = idx === 0;
+            
+            return (
+              <div 
+                key={idx}
+                className={cn(
+                  "p-3 rounded-[12px] border transition-all",
+                  isToday 
+                    ? "bg-accent/10 border-accent/30" 
+                    : "bg-muted/10 border-muted/20"
+                )}
+              >
+                <div className={cn(
+                  "text-[10px] font-bold uppercase tracking-wide mb-2",
+                  isToday ? "text-accent" : "text-muted-foreground"
                 )}>
-                  {event.title}
-                </p>
-                <span className="text-[11px] text-muted-foreground">
-                  {eventTime.toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
+                  {date.toLocaleDateString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
+                    weekday: 'short',
+                    day: 'numeric'
                   })}
-                </span>
+                </div>
+                
+                {dayEvents.length > 0 ? (
+                  <div className="space-y-1">
+                    {dayEvents.slice(0, 2).map((event) => (
+                      <div key={event.id} className="text-[10px] text-foreground/80 truncate">
+                        • {event.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <div className="text-[9px] text-muted-foreground">
+                        +{dayEvents.length - 2} more
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-muted-foreground/60">
+                    {locale === 'ar' ? 'فارغ' : 'Free'}
+                  </div>
+                )}
               </div>
-              {isRelated && (
-                <p className="text-[10px] text-accent font-medium uppercase tracking-wider">
-                  {locale === 'ar' ? 'مرتبط بالمهمة النشطة' : 'Related to active task'}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }

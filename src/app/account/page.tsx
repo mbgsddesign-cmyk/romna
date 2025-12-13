@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { BottomNav } from '@/components/bottom-nav';
+import Link from 'next/link';
 
 export default function AccountPage() {
   const { user, profile, signOut } = useAuth();
@@ -164,7 +165,7 @@ export default function AccountPage() {
         </div>
 
         <div className="space-y-3">
-          <button className="w-full border p-4 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/5" style={{
+          <Link href="/pricing" className="w-full border p-4 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/5" style={{
             backgroundColor: '#121e18',
             borderColor: 'rgba(255, 255, 255, 0.05)'
           }}>
@@ -173,17 +174,17 @@ export default function AccountPage() {
                 backgroundColor: 'rgba(249, 245, 6, 0.1)',
                 color: '#f9f506'
               }}>
-                <span className="material-symbols-outlined">notifications</span>
+                <span className="material-symbols-outlined">payments</span>
               </div>
               <div className="text-left">
-                <p className="font-semibold text-white">Notifications</p>
-                <p className="text-xs text-gray-500">Email, Push</p>
+                <p className="font-semibold text-white">Subscription</p>
+                <p className="text-xs text-gray-500">Manage plan & billing</p>
               </div>
             </div>
             <span className="material-symbols-outlined text-gray-500">chevron_right</span>
-          </button>
+          </Link>
 
-          <button className="w-full border p-4 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/5" style={{
+          <Link href="/settings" className="w-full border p-4 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/5" style={{
             backgroundColor: '#121e18',
             borderColor: 'rgba(255, 255, 255, 0.05)'
           }}>
@@ -192,15 +193,15 @@ export default function AccountPage() {
                 backgroundColor: 'rgba(249, 245, 6, 0.1)',
                 color: '#f9f506'
               }}>
-                <span className="material-symbols-outlined">grid_view</span>
+                <span className="material-symbols-outlined">settings</span>
               </div>
               <div className="text-left">
-                <p className="font-semibold text-white">Integrations</p>
-                <p className="text-xs text-gray-500">Manage connections</p>
+                <p className="font-semibold text-white">Settings</p>
+                <p className="text-xs text-gray-500">Theme, Language, Integrations</p>
               </div>
             </div>
             <span className="material-symbols-outlined text-gray-500">chevron_right</span>
-          </button>
+          </Link>
         </div>
       </main>
 

@@ -28,6 +28,7 @@ import { SectionHeader, EmptyState } from '@/components/romna';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { BottomNav } from '@/components/bottom-nav';
 
 export default function SettingsPage() {
   const { t, locale } = useTranslation();
@@ -169,7 +170,7 @@ export default function SettingsPage() {
   const PlanIcon = getPlanIcon(profile?.subscription?.plan);
 
   return (
-    <PageWrapper className="px-5">
+    <PageWrapper className="px-5 pb-24">
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -470,6 +471,8 @@ export default function SettingsPage() {
           </motion.section>
         )}
       </motion.div>
+
+      <BottomNav />
 
       <Sheet open={isAddEmailOpen} onOpenChange={setIsAddEmailOpen}>
         <SheetContent side="bottom" className="rounded-t-[22px] pb-8">

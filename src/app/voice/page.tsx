@@ -13,19 +13,17 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { MicButton, Waveform, IntentBadge, SectionHeader, EmptyState } from '@/components/romna';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 export default function VoicePage() {
   const { t, locale } = useTranslation();
   const { user } = useAuth();
+  const router = useRouter();
   const { voiceNotes, voiceIntents, addVoiceNote, addVoiceIntent, updateVoiceIntent, addTask, addEvent } = useAppStore();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [detectedIntent, setDetectedIntent] = useState<{
-    type: IntentType;
-    confidence?: number;
-    data: Record<string, unknown>;
-  } | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingMimeTypeRef = useRef<string>('');
@@ -105,7 +103,7 @@ export default function VoicePage() {
   const processAudio = async (audioBlob: Blob) => {
     setIsProcessing(true);
     setTranscript('');
-    setDetectedIntent(null);
+    setProcessingStatus(locale === 'ar' ? 'جاري التعرف على الصوت...' : 'Transcribing...');
 
     try {
       const formData = new FormData();
@@ -118,22 +116,9 @@ export default function VoicePage() {
 
       if (!transcribeRes.ok) {
         const errorData = await transcribeRes.json();
-        if (errorData.error === 'DashScope API key not configured') {
-          toast.error(locale === 'ar' ? 'مفتاح DashScope غير مضبوط - استخدم الوضع التجريبي' : 'DashScope API key not configured - using demo mode');
-          setTranscript('Demo: Add a meeting with Ahmed tomorrow at 3pm');
-          setDetectedIntent({
-            type: 'event',
-            confidence: 0.92,
-            data: { title: 'Meeting with Ahmed', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '3pm' },
-          });
-          return;
-        }
-        
-        // Show provider in error message for debugging
-        const provider = errorData.provider || 'Speech recognition';
         toast.error(locale === 'ar' 
           ? `فشل التعرف على الصوت: ${errorData.error}` 
-          : `${provider} failed: ${errorData.error}`
+          : `Speech recognition failed: ${errorData.error}`
         );
         throw new Error('Transcription failed');
       }
@@ -146,164 +131,66 @@ export default function VoicePage() {
       }
       
       setTranscript(text);
+      setProcessingStatus(locale === 'ar' ? 'جاري معالجة القرار...' : 'Processing decision...');
 
-      const classifyRes = await fetch('/api/voice/classify', {
+      if (!user?.id) {
+        toast.error(locale === 'ar' ? 'المستخدم غير مسجل دخول' : 'User not authenticated');
+        return;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const decideRes = await fetch('/api/voice/decide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: text, locale, userId: user?.id }),
+        body: JSON.stringify({ 
+          transcript: text, 
+          locale, 
+          userId: user.id 
+        }),
+        signal: controller.signal,
       });
 
-      if (!classifyRes.ok) throw new Error('Classification failed');
-      
-      const { success, intent } = await classifyRes.json();
-      
-      if (success && intent) {
-        const intentData = {
-          type: intent.type as IntentType,
-          confidence: intent.confidence,
-          data: intent[intent.type] || {},
-        };
-        setDetectedIntent(intentData);
+      clearTimeout(timeoutId);
+
+      if (!decideRes.ok) {
+        const errorData = await decideRes.json();
+        toast.error(errorData.error || (locale === 'ar' ? 'فشل معالجة الأمر' : 'Failed to process command'));
+        return;
       }
-    } catch (err) {
+      
+      const { success, decision, intent, action } = await decideRes.json();
+      
+      if (success) {
+        let successMessage = locale === 'ar' ? 'تم!' : 'Done!';
+        
+        if (action === 'create_task') {
+          successMessage = locale === 'ar' ? 'تم إنشاء المهمة!' : 'Task created!';
+        } else if (action === 'create_reminder') {
+          successMessage = locale === 'ar' ? 'تم إنشاء التذكير!' : 'Reminder created!';
+        } else if (action === 'update_decision') {
+          successMessage = locale === 'ar' ? 'تم تحديث القرار!' : 'Decision updated!';
+        }
+
+        toast.success(successMessage);
+
+        setTimeout(() => {
+          router.push('/');
+        }, 500);
+      }
+      
+    } catch (err: any) {
       console.error('Processing error:', err);
-      if (err instanceof Error && err.message !== 'Transcription failed') {
+      
+      if (err.name === 'AbortError') {
+        toast.error(locale === 'ar' ? 'انتهت مهلة الطلب - حاول مرة أخرى' : 'Request timeout - try again');
+      } else if (err.message !== 'Transcription failed') {
         toast.error(locale === 'ar' ? 'فشلت المعالجة - حاول مرة أخرى' : 'Processing failed. Try again.');
-      }
-      // Only show demo fallback if error is not already handled
-      if (!transcript) {
-        setTranscript(locale === 'ar' ? 'تجريبي: ذكرني بالاجتماع غداً الساعة 10 صباحاً' : 'Demo: Remind me about the meeting tomorrow at 10am');
-        setDetectedIntent({
-          type: 'reminder',
-          confidence: 0.88,
-          data: { title: locale === 'ar' ? 'الاجتماع' : 'meeting', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '10am' },
-        });
       }
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  const handleApproveAction = async () => {
-    if (!detectedIntent || !transcript) return;
-
-    try {
-      const res = await fetch('/api/actions/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intent: detectedIntent.type,
-          payload: {
-            transcript,
-            confidence: detectedIntent.confidence,
-            data: detectedIntent.data,
-            userId: user?.id,
-          }
-        })
-      });
-
-      if (!res.ok) throw new Error('Approve failed');
-
-      // Keep existing UI state management
-      addVoiceNote({ transcript, intent: detectedIntent.type });
-      
-      addVoiceIntent({
-        type: detectedIntent.type,
-        rawText: transcript,
-        structuredData: detectedIntent.data,
-        status: detectedIntent.data.scheduledFor ? 'scheduled' : 'executed',
-        scheduledFor: detectedIntent.data.scheduledFor as string | undefined,
-      });
-
-      if (detectedIntent.type === 'task') {
-        const taskData = detectedIntent.data as { title?: string; dueDate?: string; date?: string; priority?: 'low' | 'medium' | 'high' };
-        const taskTitle = taskData.title || transcript;
-        const dueDate = taskData.dueDate || taskData.date || new Date().toISOString();
-        
-        addTask({
-          title: taskTitle,
-          dueDate: dueDate,
-          priority: taskData.priority || 'medium',
-          status: 'pending',
-        });
-
-        if (user?.id) {
-          await supabase.from('tasks').insert({
-            user_id: user.id,
-            title: taskTitle,
-            due_date: dueDate,
-            priority: taskData.priority || 'medium',
-            status: 'pending',
-            source: 'voice',
-          });
-        }
-        
-        toast.success(locale === 'ar' ? 'تم إنشاء المهمة!' : 'Task created!');
-      } else if (detectedIntent.type === 'event') {
-        const eventData = detectedIntent.data as { title?: string; date?: string; location?: string; time?: string };
-        const eventTitle = eventData.title || transcript;
-        let eventDate = eventData.date || new Date().toISOString();
-        if (eventData.time) {
-          const timePart = eventData.time.replace(/[^\d:]/g, '');
-          eventDate = `${eventDate.split('T')[0]}T${timePart.padStart(5, '0')}:00`;
-        }
-
-        addEvent({
-          title: eventTitle,
-          date: eventDate,
-          location: eventData.location,
-        });
-
-        if (user?.id) {
-          await supabase.from('events').insert({
-            user_id: user.id,
-            title: eventTitle,
-            start_time: eventDate,
-            location: eventData.location,
-            source: 'voice',
-          });
-        }
-
-        toast.success(locale === 'ar' ? 'تم إنشاء الحدث!' : 'Event created!');
-      } else if (detectedIntent.type === 'reminder') {
-        const reminderData = detectedIntent.data as { title?: string; date?: string; time?: string };
-        const reminderTitle = reminderData.title || transcript;
-        let reminderDate = reminderData.date || new Date(Date.now() + 3600000).toISOString();
-
-        addTask({
-          title: `🔔 ${reminderTitle}`,
-          dueDate: reminderDate,
-          priority: 'high',
-          status: 'pending',
-        });
-
-        if (user?.id) {
-          await supabase.from('tasks').insert({
-            user_id: user.id,
-            title: `🔔 ${reminderTitle}`,
-            due_date: reminderDate,
-            priority: 'high',
-            status: 'pending',
-            source: 'voice',
-          });
-        }
-
-        toast.success(locale === 'ar' ? 'تم إنشاء التذكير!' : 'Reminder set!');
-      } else if (detectedIntent.type === 'whatsapp_message') {
-        toast.success(locale === 'ar' ? 'تم جدولة رسالة واتساب!' : 'WhatsApp message scheduled!');
-      } else if (detectedIntent.type === 'telegram_message') {
-        toast.success(locale === 'ar' ? 'تم جدولة رسالة تيليجرام!' : 'Telegram message scheduled!');
-      } else if (detectedIntent.type === 'email') {
-        toast.success(locale === 'ar' ? 'تم حفظ مسودة البريد!' : 'Email draft saved!');
-      } else {
-        toast.success(locale === 'ar' ? 'تم الحفظ!' : 'Saved!');
-      }
-
-      setTranscript('');
-      setDetectedIntent(null);
-    } catch (error) {
-      console.error('Approve action error:', error);
-      toast.error(locale === 'ar' ? 'فشل حفظ الإجراء' : 'Failed to save action');
+      setProcessingStatus('');
     }
   };
 
@@ -365,13 +252,13 @@ export default function VoicePage() {
           >
             <Waveform isActive={isRecording} barCount={7} className="h-10 mb-4" />
             <p className="text-[15px] text-muted-foreground font-medium">
-              {isProcessing ? t('processing') : isRecording ? t('recording') : t('holdToRecord')}
+              {isProcessing && processingStatus ? processingStatus : isProcessing ? t('processing') : isRecording ? t('recording') : t('holdToRecord')}
             </p>
           </motion.div>
         </motion.div>
 
         <AnimatePresence>
-          {transcript && (
+          {transcript && !isProcessing && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -382,43 +269,6 @@ export default function VoicePage() {
                   {t('transcript')}
                 </h3>
                 <p className="text-[15px] text-foreground leading-relaxed">{transcript}</p>
-              </div>
-            </motion.div>
-          )}
-
-          {detectedIntent && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              <div className="glass-card p-5 mb-4">
-                <h3 className="text-[13px] font-semibold text-accent uppercase tracking-wider mb-3">
-                  {t('intentDetected')}
-                </h3>
-                <div className="flex items-center gap-3 mb-4">
-                  <IntentBadge intent={detectedIntent.type} />
-                  {detectedIntent.confidence && (
-                    <span className="text-[12px] text-accent font-medium">
-                      {Math.round(detectedIntent.confidence * 100)}% {locale === 'ar' ? 'ثقة' : 'confidence'}
-                    </span>
-                  )}
-                </div>
-                <div className="glass-card bg-background/30 p-4 mb-4 space-y-2">
-                  {Object.entries(detectedIntent.data).map(([key, value]) => (
-                    <div key={key} className="flex justify-between text-[13px]">
-                      <span className="text-muted-foreground capitalize">{key}:</span>
-                      <span className="font-semibold text-foreground">{String(value)}</span>
-                    </div>
-                  ))}
-                </div>
-                <Button 
-                  onClick={handleApproveAction} 
-                  className="w-full h-12 bg-accent hover:bg-accent/90 text-background font-bold rounded-[16px] neon-glow" 
-                  size="lg"
-                >
-                  {t('approveAction')}
-                </Button>
               </div>
             </motion.div>
           )}

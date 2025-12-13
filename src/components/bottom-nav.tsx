@@ -12,7 +12,6 @@ const baseNavItems = [
   { href: '/', icon: Home, labelKey: 'home' as const },
   { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
   { href: '/voice', icon: Mic, labelKey: 'voice' as const, isPrimary: true },
-  { href: '/calendar', icon: Calendar, labelKey: 'calendar' as const },
   { href: '/settings', icon: User, labelKey: 'account' as const },
 ];
 

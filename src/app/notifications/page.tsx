@@ -12,13 +12,15 @@ import {
   CheckCircle2, 
   Lightbulb, 
   Mic,
-  Bell
+  Bell,
+  Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { PaywallModal } from '@/components/romna/paywall-modal';
+import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 
 type NotificationType = 'all' | 'ai' | 'reminders';
 
@@ -39,6 +41,7 @@ interface Notification {
 export default function NotificationsPage() {
   const { t, locale } = useTranslation();
   const router = useRouter();
+  const { decision, status: decisionStatus } = useAutoGLMDecision();
   const [activeTab, setActiveTab] = useState<NotificationType>('all');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,9 +155,7 @@ export default function NotificationsPage() {
   const newNotifications = notifications.filter(n => !n.is_read);
   const earlierNotifications = notifications.filter(n => n.is_read);
 
-  // Fallback data if no notifications (to show the design)
-  // In a real app we might want to show empty state, but for this task we want to match the design visually if empty
-  const showDesignFallback = notifications.length === 0 && !loading;
+  const hasActiveDecision = decision?.active_task != null;
 
   return (
     <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#f6f8f7] dark:bg-[#112117] text-foreground font-sans">
@@ -215,106 +216,83 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* Smart Hint */}
+      {/* Decision Context Hint */}
       <div className="px-6 py-4 shrink-0 text-center z-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A2C22]/50 border border-white/5 backdrop-blur-sm">
-          <Sparkles className="w-4 h-4 text-[#30e87a]" />
-          <p className="text-[#9db8a8] text-xs font-medium tracking-wide">ROMANA waits until the right moment.</p>
-        </div>
+        {hasActiveDecision ? (
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A2C22]/50 border border-white/5 backdrop-blur-sm">
+            <Sparkles className="w-4 h-4 text-[#30e87a]" />
+            <p className="text-[#9db8a8] text-xs font-medium tracking-wide">
+              {locale === 'ar' ? 'مرتبط بقرار اليوم' : 'Related to today\'s focus'}
+            </p>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A2C22]/50 border border-white/5 backdrop-blur-sm">
+            <Brain className="w-4 h-4 text-muted-foreground" />
+            <p className="text-[#9db8a8] text-xs font-medium tracking-wide">
+              {locale === 'ar' ? 'لا يوجد قرار نشط' : 'No active decision'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Notification List */}
       <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-3 z-0">
         
-        {/* NEW SECTION */}
-        {(newNotifications.length > 0 || showDesignFallback) && (
+        {!hasActiveDecision && notifications.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Brain className="w-16 h-16 text-muted-foreground/30 mb-4" />
+            <p className="text-white/60 text-sm">
+              {locale === 'ar' 
+                ? 'الإشعارات تظهر عندما يوجد قرار نشط' 
+                : 'Notifications are informational only'}
+            </p>
+          </div>
+        ) : (
           <>
-            <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-2">New</h3>
-            
-            {showDesignFallback ? (
+            {/* NEW SECTION */}
+            {newNotifications.length > 0 && (
               <>
-                 <NotificationItem 
-                   title="Meeting Conflict"
-                   message="Your 2 PM design review overlaps with travel time to the airport."
-                   time="2m ago"
-                   icon={AlertTriangle}
-                   isUnread={true}
-                   type="warning"
-                 />
-                 <NotificationItem 
-                   title="Grocery Run"
-                   message="Don't forget almond milk on your way home."
-                   time="1h ago"
-                   icon={ShoppingBasket}
-                   isUnread={true}
-                   type="shopping"
-                 />
+                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-2">New</h3>
+                
+                {newNotifications.map(n => (
+                  <NotificationItem 
+                    key={n.id}
+                    title={n.title}
+                    message={n.message}
+                    time={getTimeAgo(n.created_at)}
+                    icon={getIconForCategory(n.category, n.priority)}
+                    isUnread={true}
+                    onClick={() => handleMarkRead(n.id)}
+                    category={n.category}
+                    metadata={n.metadata as any}
+                    hasActiveDecision={hasActiveDecision}
+                    locale={locale}
+                  />
+                ))}
               </>
-            ) : (
-              newNotifications.map(n => (
-                <NotificationItem 
-                  key={n.id}
-                  title={n.title}
-                  message={n.message}
-                  time={getTimeAgo(n.created_at)}
-                  icon={getIconForCategory(n.category, n.priority)}
-                  isUnread={true}
-                  onClick={() => handleMarkRead(n.id)}
-                  category={n.category}
-                  metadata={n.metadata as any}
-                  onUnlock={() => openPaywall('AI Action', 'blocked_action_click')}
-                  onUpgrade={() => openPaywall('Pro Plan', 'upgrade_button_click')}
-                />
-              ))
             )}
-          </>
-        )}
 
-        {/* EARLIER SECTION */}
-        {(earlierNotifications.length > 0 || showDesignFallback) && (
-          <>
-            <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">Earlier</h3>
-            
-            {showDesignFallback ? (
+            {/* EARLIER SECTION */}
+            {earlierNotifications.length > 0 && (
               <>
-                <NotificationItem 
-                  title="Deep Work Block"
-                  message="Scheduled for 30 mins. Focus mode was active."
-                  time="3h ago"
-                  icon={Calendar}
-                  isUnread={false}
-                />
-                <NotificationItem 
-                  title="Daily Goals Met"
-                  message="You completed 5/5 planned tasks today."
-                  time="5h ago"
-                  icon={CheckCircle2}
-                  isUnread={false}
-                />
-                <NotificationItem 
-                  title="Suggestion"
-                  message="Try moving your gym session to morning for better energy."
-                  time="Yesterday"
-                  icon={Lightbulb}
-                  isUnread={false}
-                />
+                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">Earlier</h3>
+                
+                {earlierNotifications.map(n => (
+                  <NotificationItem 
+                    key={n.id}
+                    title={n.title}
+                    message={n.message}
+                    time={getTimeAgo(n.created_at)}
+                    icon={getIconForCategory(n.category, n.priority)}
+                    isUnread={false}
+                    onClick={() => {}}
+                    category={n.category}
+                    metadata={n.metadata as any}
+                    hasActiveDecision={hasActiveDecision}
+                    locale={locale}
+                  />
+                ))}
               </>
-            ) : (
-              earlierNotifications.map(n => (
-                <NotificationItem 
-                  key={n.id}
-                  title={n.title}
-                  message={n.message}
-                  time={getTimeAgo(n.created_at)}
-                  icon={getIconForCategory(n.category, n.priority)}
-                  isUnread={false}
-                  onClick={() => {}}
-                  category={n.category}
-                  metadata={n.metadata as any}
-                  onUnlock={() => openPaywall('AI Action', 'blocked_action_click')}
-                  onUpgrade={() => openPaywall('Pro Plan', 'upgrade_button_click')}
-                />
-              ))
             )}
           </>
         )}
@@ -351,8 +329,8 @@ function NotificationItem({
   onClick,
   category,
   metadata,
-  onUnlock,
-  onUpgrade
+  hasActiveDecision,
+  locale
 }: { 
   title: string; 
   message: string; 
@@ -362,32 +340,21 @@ function NotificationItem({
   onClick?: () => void;
   category?: string;
   metadata?: { pro_eligible?: boolean; reason?: string; action_status?: string };
-  onUnlock?: () => void;
-  onUpgrade?: () => void;
+  hasActiveDecision: boolean;
+  locale: string;
 }) {
-  const isUpsell = category === 'upgrade';
-  const isProEligible = metadata?.pro_eligible === true;
-  const isBlocked = metadata?.action_status === 'blocked_pro';
-
-  const handleItemClick = (e: React.MouseEvent) => {
-    if (isBlocked && onUnlock) {
-      e.stopPropagation();
-      onUnlock();
-      return;
-    }
-    if (onClick) onClick();
-  };
+  const isRelatedToDecision = hasActiveDecision && (category === 'ai' || category === 'conflict' || category === 'task');
+  const isInformational = !hasActiveDecision || category === 'success' || category === 'achievement';
 
   return (
     <div 
-      onClick={handleItemClick}
+      onClick={onClick}
       className={cn(
         "group relative w-full touch-pan-x cursor-pointer",
       )}
     >
       <div className={cn(
         "relative flex items-start gap-4 p-5 rounded-2xl shadow-lg transition-transform active:scale-[0.98]",
-        isUpsell ? "bg-gradient-to-br from-[#1A2C22] to-[#2C1A22] border border-accent/30" :
         isUnread 
           ? "bg-[#23362b] border-l-4 border-[#30e87a]" 
           : "bg-[#1A2C22] border border-white/5"
@@ -395,20 +362,11 @@ function NotificationItem({
         <div className="relative">
           <div className={cn(
             "flex items-center justify-center rounded-xl size-12 shrink-0",
-            isUpsell ? "bg-accent/20 text-accent" :
             isUnread ? "bg-[#30e87a]/20 text-[#30e87a]" : "bg-[#23362b] text-[#9db8a8]"
           )}>
-            {isBlocked ? <div className="text-accent"><Icon className="w-6 h-6 opacity-50" /></div> : <Icon className="w-6 h-6" />}
-            {isBlocked && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-black/40 rounded-full p-1 backdrop-blur-sm">
-                        {/* Lock icon overlay */}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                    </div>
-                </div>
-            )}
+            <Icon className="w-6 h-6" />
           </div>
-          {isUnread && !isUpsell && !isBlocked && (
+          {isUnread && (
             <div className="absolute -top-1 -right-1 size-3 bg-[#30e87a] rounded-full border-2 border-[#23362b]"></div>
           )}
         </div>
@@ -417,25 +375,23 @@ function NotificationItem({
             <div className="flex items-center gap-2">
               <p className={cn(
                 "text-base leading-tight truncate pr-2",
-                isUpsell ? "text-white font-bold" :
                 isUnread ? "text-white font-semibold" : "text-white/80 font-medium"
               )}>
                 {title}
               </p>
-              {isProEligible && !isUpsell && !isBlocked && (
-                 <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider border border-accent/20">
-                   Pro Insight
-                 </span>
+              {isRelatedToDecision && (
+                <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider">
+                  {locale === 'ar' ? 'مرتبط' : 'Related'}
+                </span>
               )}
-              {isBlocked && (
-                 <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 text-[10px] font-bold uppercase tracking-wider border border-amber-500/20">
-                   Locked
-                 </span>
+              {isInformational && (
+                <span className="px-1.5 py-0.5 rounded-md bg-muted/20 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                  {locale === 'ar' ? 'معلومات' : 'Info'}
+                </span>
               )}
             </div>
             <span className={cn(
               "text-xs font-medium whitespace-nowrap",
-              isUpsell ? "text-accent" :
               isUnread ? "text-[#30e87a]" : "text-white/30"
             )}>
               {time}
@@ -443,40 +399,10 @@ function NotificationItem({
           </div>
           <p className={cn(
             "text-sm font-normal leading-relaxed line-clamp-2",
-            isUpsell ? "text-white/90" :
             isUnread ? "text-[#9db8a8]" : "text-white/40"
           )}>
             {message}
           </p>
-          
-          {isUpsell && (
-              <div className="mt-3">
-                  <button 
-                      onClick={(e) => {
-                          e.stopPropagation();
-                          if (onUpgrade) onUpgrade();
-                      }}
-                      className="text-xs font-bold bg-accent/90 hover:bg-accent text-white px-4 py-2 rounded-lg w-full transition-colors"
-                  >
-                      Upgrade to Pro
-                  </button>
-              </div>
-          )}
-
-          {isBlocked && (
-              <div className="mt-3">
-                  <button 
-                      onClick={(e) => {
-                          e.stopPropagation();
-                          if (onUnlock) onUnlock();
-                      }}
-                      className="flex items-center justify-center gap-2 text-xs font-bold bg-[#1A2C22] hover:bg-[#23362b] border border-amber-500/30 text-amber-500 px-4 py-2 rounded-lg w-full transition-colors"
-                  >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                      Unlock Action
-                  </button>
-              </div>
-          )}
         </div>
       </div>
     </div>

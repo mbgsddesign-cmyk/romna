@@ -6,9 +6,10 @@ import { motion } from 'framer-motion';
 import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight, RefreshCcw, AlertCircle, Mic } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 import { useRomnaAI } from '@/contexts/romna-ai-context';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   const { t, locale } = useTranslation();
@@ -254,9 +255,152 @@ export default function HomePage() {
                 </div>
               </motion.div>
             )}
+
+            <DecisionScopedCalendar 
+              activeTask={decision.active_task}
+              locale={locale}
+            />
           </>
         )}
       </motion.div>
     </PageWrapper>
+  );
+}
+
+function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; locale: string }) {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) return;
+
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(23, 59, 59, 999);
+
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('start_time', today.toISOString())
+          .lte('start_time', tomorrow.toISOString())
+          .order('start_time');
+
+        if (!error && data) {
+          setEvents(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch events:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, [activeTask?.id]);
+
+  if (loading) return null;
+  
+  if (events.length === 0 && activeTask) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-5 mb-6"
+      >
+        <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-accent" />
+          {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+        </h3>
+        <div className="text-center py-4">
+          <p className="text-[13px] text-muted-foreground">
+            {locale === 'ar' 
+              ? 'لا توجد أحداث مجدولة. ركز على المهمة النشطة.' 
+              : 'No scheduled events. Focus on the active task.'}
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (!activeTask) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-5 mb-6"
+      >
+        <h3 className="text-[14px] font-bold text-muted-foreground mb-3 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+        </h3>
+        <div className="text-center py-4">
+          <p className="text-[12px] text-muted-foreground/60">
+            {locale === 'ar' 
+              ? 'الجدول يظهر عندما يوجد قرار نشط' 
+              : 'Calendar activates when a decision exists'}
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-card p-5 mb-6"
+    >
+      <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
+        <Calendar className="w-4 h-4 text-accent" />
+        {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+      </h3>
+      
+      <div className="space-y-2">
+        {events.map((event) => {
+          const eventTime = new Date(event.start_time);
+          const isRelated = event.title?.toLowerCase().includes(activeTask.title?.toLowerCase().split(' ')[0]) || 
+                           event.description?.toLowerCase().includes(activeTask.title?.toLowerCase().split(' ')[0]);
+          
+          return (
+            <div 
+              key={event.id}
+              className={cn(
+                "p-3 rounded-[12px] border transition-all",
+                isRelated 
+                  ? "bg-accent/10 border-accent/30" 
+                  : "bg-muted/20 border-muted/30 opacity-60"
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <p className={cn(
+                  "text-[13px] font-semibold",
+                  isRelated ? "text-accent" : "text-muted-foreground"
+                )}>
+                  {event.title}
+                </p>
+                <span className="text-[11px] text-muted-foreground">
+                  {eventTime.toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                </span>
+              </div>
+              {isRelated && (
+                <p className="text-[10px] text-accent font-medium uppercase tracking-wider">
+                  {locale === 'ar' ? 'مرتبط بالمهمة النشطة' : 'Related to active task'}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
   );
 }

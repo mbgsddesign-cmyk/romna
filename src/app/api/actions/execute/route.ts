@@ -1,171 +1,149 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { UserActivity } from '@/lib/database.types';
+import { createClient } from '@supabase/supabase-js';
+import { ExecutionService } from '@/lib/execution/execution-service';
+import {
+  NotificationProvider,
+  AlarmProvider,
+  EmailProvider,
+  WhatsAppProvider,
+} from '@/lib/execution/providers';
 
-interface ActionPayload {
-  title?: string;
-  description?: string;
-  due_date?: string;
-  priority?: string;
-  event_id?: string;
-  start_time?: string;
-  end_time?: string;
-  [key: string]: unknown;
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-interface ActivityMeta {
-  type: string;
-  payload: ActionPayload;
-  status: string;
-  action_hash?: string;
-  execution_result?: unknown;
-  [key: string]: unknown;
-}
-
-export async function POST(request: NextRequest) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
+/**
+ * Scheduler/Worker API
+ * Polls execution_queue and executes scheduled actions
+ * Called periodically by cron job (Vercel Cron, AWS EventBridge, etc.)
+ */
+export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Verify cron authorization (basic security)
+    const authHeader = req.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET || 'dev-secret';
     
-    // Verify JWT
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
-    // 2. Get Action Hash
-    // distinct from body vs query param. Let's support body for safety.
-    const { action_hash } = await request.json();
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const executionService = new ExecutionService(supabase);
 
-    if (!action_hash) {
-      return NextResponse.json({ error: 'Missing action_hash' }, { status: 400 });
-    }
+    // Get all scheduled executions that are due
+    const scheduledItems = await executionService.getScheduledExecutions();
 
-    // 3. Retrieve Proposed Action
-    // We search in user_activity where action = 'action_proposed' and meta->action_hash = action_hash
-    const { data: activity, error: fetchError } = await supabase
-      .from('user_activity')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('action', 'action_proposed')
-      .filter('meta->>action_hash', 'eq', action_hash)
-      .single();
-
-    if (fetchError || !activity) {
-      return NextResponse.json({ error: 'Action not found or invalid' }, { status: 404 });
-    }
-
-    const meta = activity.meta as unknown as ActivityMeta;
-
-    // 4. Idempotency Check
-    if (meta.status === 'executed') {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Action already executed', 
-        status: 'executed',
-        data: meta.execution_result 
+    if (scheduledItems.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No executions due',
+        executed: 0,
       });
     }
 
-    if (meta.status !== 'pending') {
-      return NextResponse.json({ error: `Action status is ${meta.status}` }, { status: 400 });
-    }
+    console.log(`[Worker] Found ${scheduledItems.length} executions to process`);
 
-    // 5. Execute Action
-    let executionResult = null;
-    const type = meta.type;
-    const payload = meta.payload;
+    const results = [];
 
-    if (type === 'create_task') {
-      const { data: task, error: taskError } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: user.id,
-          title: payload.title || 'Untitled Task',
-          description: payload.description || '',
-          due_date: payload.due_date,
-          priority: payload.priority || 'normal',
-          status: 'pending'
-        })
-        .select()
-        .single();
-      
-      if (taskError) throw taskError;
-      executionResult = task;
+    for (const item of scheduledItems) {
+      try {
+        // Update status to executing
+        await executionService.updateExecutionStatus(item.id, 'executing');
 
-    } else if (type === 'reschedule_event') {
-      // Expecting payload to have event_id and new times
-      if (!payload.event_id) throw new Error('Missing event_id');
-      
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .update({
-          start_time: payload.start_time,
-          end_time: payload.end_time
-        })
-        .eq('id', payload.event_id)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (eventError) throw eventError;
-      executionResult = event;
-
-    } else if (type === 'send_email') {
-        // Placeholder for now, as per instructions "No monetization logic yet" implies
-        // maybe no deep integrations. But let's just mark it as done.
-        executionResult = { simulated: true, ...payload };
-    } else {
-        throw new Error(`Unknown action type: ${type}`);
-    }
-
-    // 6. Update Status
-    const { error: updateError } = await supabase
-      .from('user_activity')
-      .update({
-        meta: {
-          ...meta,
-          status: 'executed',
-          executed_at: new Date().toISOString(),
-          execution_result: executionResult
+        // Get the right provider
+        let provider;
+        switch (item.type) {
+          case 'notification':
+            provider = new NotificationProvider();
+            break;
+          case 'alarm':
+            provider = new AlarmProvider();
+            break;
+          case 'email':
+            provider = new EmailProvider();
+            break;
+          case 'whatsapp':
+            provider = new WhatsAppProvider();
+            break;
+          default:
+            throw new Error(`Unknown execution type: ${item.type}`);
         }
-      })
-      .eq('id', activity.id);
 
-    if (updateError) throw updateError;
+        // Execute
+        const result = await provider.execute(item.payload);
 
-    // 7. Log Execution Event
-    await supabase.from('user_activity').insert({
-      user_id: user.id,
-      action: 'action_executed',
-      meta: {
-        original_activity_id: activity.id,
-        action_hash,
-        type,
-        timestamp: new Date().toISOString()
+        if (result.success) {
+          // Mark as executed
+          await executionService.updateExecutionStatus(item.id, 'executed');
+          
+          // Update the plan
+          await supabase
+            .from('execution_plans')
+            .update({ status: 'executed', executed_at: new Date().toISOString() })
+            .eq('id', item.execution_plan_id);
+
+          results.push({
+            id: item.id,
+            type: item.type,
+            status: 'executed',
+          });
+
+          console.log(`[Worker] Successfully executed ${item.type} for ${item.user_id}`);
+        } else {
+          // Failed - increment retry
+          const shouldRetry = item.retry_count < 2;
+          
+          if (shouldRetry) {
+            await executionService.incrementRetry(item.id);
+            console.warn(`[Worker] Execution failed, will retry: ${result.error}`);
+          } else {
+            await executionService.updateExecutionStatus(item.id, 'failed', result.error);
+            await supabase
+              .from('execution_plans')
+              .update({ status: 'failed', error_message: result.error })
+              .eq('id', item.execution_plan_id);
+            console.error(`[Worker] Execution failed permanently: ${result.error}`);
+          }
+
+          results.push({
+            id: item.id,
+            type: item.type,
+            status: shouldRetry ? 'retrying' : 'failed',
+            error: result.error,
+          });
+        }
+      } catch (error) {
+        console.error(`[Worker] Error processing execution ${item.id}:`, error);
+        
+        // Increment retry
+        await executionService.incrementRetry(item.id);
+        
+        results.push({
+          id: item.id,
+          type: item.type,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
-    });
+    }
 
     return NextResponse.json({
       success: true,
-      status: 'executed',
-      data: executionResult
+      message: `Processed ${scheduledItems.length} executions`,
+      executed: results.filter(r => r.status === 'executed').length,
+      failed: results.filter(r => r.status === 'failed').length,
+      retrying: results.filter(r => r.status === 'retrying').length,
+      results,
     });
-
   } catch (error) {
-    console.error('Execution error:', error);
+    console.error('[Worker] Execution error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Execution failed',
+      },
       { status: 500 }
     );
   }

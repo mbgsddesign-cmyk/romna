@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { AIEngineService } from '@/services/ai-engine.service';
 import { runDayOrchestrator } from '@/lib/autoglm/orchestrator-core';
+import { ExecutionService } from '@/lib/execution/execution-service';
 
 const SUPPORTED_INTENTS = [
   'What should I do now?',
@@ -40,6 +41,7 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
     }
 
     const supabase = createServerClient();
+    const executionService = new ExecutionService(supabase);
 
     const normalizedTranscript = transcript.toLowerCase().trim();
     
@@ -115,8 +117,7 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
 
       const classified = AIEngineService.classifyIntent(transcript, locale);
       
-      // Parse "after X hours/minutes" pattern (supports numbers and words)
-      let reminderDate = new Date(Date.now() + 3600000); // default 1 hour
+      let reminderDate = new Date(Date.now() + 3600000);
       
       const wordToNumber: Record<string, number> = {
         'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 
@@ -137,9 +138,9 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
       const reminderText = transcript
         .replace(/after\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(hour|minute|min)s?\s*,?\s*/gi, '')
         .replace(/remind\s+me\s+(to|for|about)?\s*/gi, '')
-        .replace(/^\s*,\s*/, '') // Remove leading comma
+        .replace(/^\s*,\s*/, '')
         .replace(/ذكرني ب/gi, '')
-        .replace(/[,\.]+$/g, '') // Remove trailing punctuation
+        .replace(/[,\.]+$/g, '')
         .trim();
       
       const reminderTitle = `🔔 ${classified.entities.title as string || reminderText || 'Reminder'}`;
@@ -165,11 +166,45 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
         );
       }
 
+      // ✅ NEW: Create execution plan + enqueue
+      const executionPlan = await executionService.createPlan({
+        user_id: userId,
+        source: 'voice',
+        intent_type: 'reminder',
+        scheduled_for: reminderDate.toISOString(),
+        requires_approval: false,
+        payload: {
+          title: reminderTitle,
+          message: reminderText,
+          taskId: newReminder.id,
+        },
+      });
+
+      if (executionPlan) {
+        await executionService.enqueue({
+          execution_plan_id: executionPlan.id,
+          user_id: userId,
+          type: 'notification',
+          scheduled_for: reminderDate.toISOString(),
+          payload: {
+            title: reminderTitle,
+            message: reminderText,
+            userId,
+            taskId: newReminder.id,
+          },
+        });
+      }
+
       await supabase.from('voice_intents').insert({
         user_id: userId,
         raw_text: transcript,
         intent_type: 'reminder',
-        extracted_data: { reminderId: newReminder.id, title: reminderTitle, due_date: reminderDate.toISOString() },
+        extracted_data: { 
+          reminderId: newReminder.id, 
+          title: reminderTitle, 
+          due_date: reminderDate.toISOString(),
+          execution_plan_id: executionPlan?.id,
+        },
         success: true,
       });
 

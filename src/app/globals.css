@@ -5,7 +5,7 @@
   --color-volt: #D9FD00;
   --color-volt-dim: rgba(217, 253, 0, 0.1);
   --color-volt-glow: rgba(217, 253, 0, 0.4);
-  --color-obsidian: rgba(20, 20, 20, 0.8);
+  --color-obsidian: rgba(20, 20, 20, 0.9); /* Darker, less transparent */
   --color-card-hover: rgba(30, 30, 30, 0.9);
   
   --font-space: var(--font-space);
@@ -13,17 +13,19 @@
   
   --radius-hyper: 32px;
   
-  --animate-breathe: breathe 4s ease-in-out infinite;
-  --animate-float: float 6s ease-in-out infinite;
+  /* MOTION REFINEMENT: Slower, ease-in-out only */
+  --animate-breathe: breathe 6s ease-in-out infinite;
+  --animate-float: float 8s ease-in-out infinite;
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   
   @keyframes breathe {
     0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(0.98); opacity: 0.9; }
+    50% { transform: scale(0.98); opacity: 0.95; }
   }
   
   @keyframes float {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+    50% { transform: translateY(-6px); }
   }
 }
 

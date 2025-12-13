@@ -73,22 +73,29 @@ export default function HomePage() {
     ai_reason: "Nothing requires action. I'm listening."
   };
 
-  const calendarEvents = [...todayTasks.slice(0, 2), ...tomorrowTasks.slice(0, 2)];
+  // Mock Timeline Data (Real data would come from execution logs)
+  const timelineItems = [
+    { type: 'past', label: 'Reminder sent', icon: 'check' },
+    { type: 'current', label: hasActiveTask ? 'Active Directive' : 'Listening', icon: 'notifications_active' },
+    { type: 'future', label: tomorrowTasks[0]?.title || 'Email follow-up', icon: 'schedule' }
+  ];
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-void pb-24 font-sans selection:bg-volt selection:text-black">
-      {/* 1. Header: Invisible Watermark */}
-      <header className="absolute top-0 left-0 w-full p-6 z-10 flex justify-between items-center opacity-50">
+      {/* 1. Header: Date Awareness */}
+      <header className="absolute top-0 left-0 w-full p-6 z-10 flex justify-between items-center opacity-60">
         <h1 className="text-sm font-bold tracking-[0.2em] text-white/30 font-space uppercase">
           ROMNA
         </h1>
-        <div className="h-2 w-2 rounded-full bg-volt/50 animate-pulse"></div>
+        <div className="text-xs font-mono text-white/40 tracking-wide">
+          {format(new Date(), 'EEEE · MMM d')}
+        </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 relative z-0">
         
         {/* 2. Center Stage: Active Decision Card */}
-        <div className="relative w-full max-w-md aspect-[3/4] max-h-[65vh] rounded-hyper bg-obsidian border border-white/5 shadow-2xl shadow-black/50 overflow-hidden flex flex-col animate-breathe group">
+        <div className="relative w-full max-w-md aspect-[3/4] max-h-[60vh] rounded-hyper bg-obsidian border border-white/5 shadow-2xl shadow-black/50 overflow-hidden flex flex-col animate-breathe group">
           
           {/* Ambient Glow */}
           <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle_at_center,rgba(217,253,0,0.03)_0%,transparent_50%)] pointer-events-none group-hover:opacity-100 transition-opacity duration-1000"></div>
@@ -144,27 +151,48 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 4. Context: Subtle Timeline Strip */}
-        <div className="mt-10 w-full max-w-md flex items-center justify-center gap-6 opacity-60">
-           {calendarEvents.length > 0 ? (
-             calendarEvents.map((task, i) => (
-                <div key={task.id} className="flex flex-col items-center gap-2 group/event cursor-default">
-                   <div className={`w-2 h-2 rounded-full transition-all duration-300 ${i === 0 ? 'bg-white shadow-[0_0_10px_white]' : 'bg-white/20'}`}></div>
-                   <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium opacity-0 group-hover/event:opacity-100 transition-opacity absolute translate-y-4">
-                      {format(parseISO(task.due_date!), 'h:mm a')}
-                   </span>
+        {/* 4. Timeline Strip */}
+        <div className="mt-8 w-full max-w-md">
+           <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 border border-white/5 backdrop-blur-sm">
+              {timelineItems.map((item, index) => (
+                <div key={index} className="flex items-center gap-4">
+                  <TimelineItem 
+                    icon={item.icon} 
+                    label={item.label} 
+                    status={item.type as 'past' | 'current' | 'future'} 
+                  />
+                  {index < timelineItems.length - 1 && <div className="w-px h-8 bg-white/10"></div>}
                 </div>
-             ))
-           ) : (
-              <span className="text-[10px] text-gray-600 uppercase tracking-widest">No upcoming events</span>
-           )}
-           {/* Timeline Line */}
-           <div className="absolute w-32 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent -z-10"></div>
+              ))}
+           </div>
+           
+           {/* Achievements Line */}
+           <div className="mt-4 text-center">
+             <p className="text-[10px] text-white/20 font-space uppercase tracking-[0.2em]">
+               3 actions handled today
+             </p>
+           </div>
         </div>
 
       </main>
 
       <BottomNav />
+    </div>
+  );
+}
+
+function TimelineItem({ icon, label, status }: { icon: string; label: string; status: 'past' | 'current' | 'future' }) {
+  const isCurrent = status === 'current';
+  const isPast = status === 'past';
+  
+  return (
+    <div className={`flex flex-col items-center gap-1 ${status === 'future' ? 'opacity-30' : ''}`}>
+      <span className={`material-symbols-outlined text-[16px] ${isCurrent ? 'text-volt animate-pulse' : isPast ? 'text-white' : 'text-white/50'}`}>
+        {icon}
+      </span>
+      <span className="text-[9px] text-white/60 font-medium tracking-wide uppercase max-w-[80px] text-center truncate">
+        {label}
+      </span>
     </div>
   );
 }

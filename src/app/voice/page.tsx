@@ -79,7 +79,15 @@ export default function VoicePage() {
       const { success, action } = await decideRes.json();
       
       if (success) {
-        toast.success(action === 'create_task' ? 'Task Created' : 'Done');
+        let successMessage = 'Done.';
+        if (action === 'create_task') successMessage = 'Task created.';
+        if (action === 'create_reminder') successMessage = 'Reminder scheduled.';
+        if (action === 'update_decision') successMessage = 'Updated.';
+        
+        // Check for approval requirement if implied by specific actions in future
+        // For now, mapping known intents
+        
+        toast.success(successMessage);
         setTimeout(() => router.push('/'), 800);
       }
       

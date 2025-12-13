@@ -35,6 +35,9 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const response = await fetch('/api/autoglm/handle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -44,7 +47,10 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
           userId: user?.id,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       console.log('[Ask ROMNA] Response received:', response.status);
 
@@ -65,7 +71,6 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
       setLastResponse(aiResponse);
       console.log('[Ask ROMNA] AI response:', aiResponse.message, 'type:', aiResponse.type);
       
-      // If execution succeeded, trigger refetch callback
       if (aiResponse.type === 'execute' && onExecuteSuccess) {
         console.log('[Ask ROMNA] Execution success - triggering refetch');
         await onExecuteSuccess();
@@ -75,8 +80,12 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[Ask ROMNA] Error:', error);
       
+      const errorMessage = error instanceof Error && error.name === 'AbortError'
+        ? 'Request timeout. Please try again.'
+        : 'Sorry, I encountered an error. Please try again.';
+
       const errorResponse: AIResponse = {
-        message: 'Sorry, I encountered an error. Please try again.',
+        message: errorMessage,
         timestamp: new Date(),
         type: 'error',
       };

@@ -3,7 +3,7 @@
 import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
-import { Sparkles, Brain, Clock, ChevronRight, Calendar, Play, SkipForward, Repeat } from 'lucide-react';
+import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -68,7 +68,7 @@ export default function HomePage() {
             {t('appName')}
           </h1>
           <p className="text-accent text-[14px] mt-0.5 font-medium">
-            {locale === 'ar' ? 'منظم يومك الذكي' : 'Your AI Day Orchestrator'}
+            {locale === 'ar' ? 'مركز القرارات الذكي' : 'AI Decision Center'}
           </p>
         </motion.header>
 
@@ -105,7 +105,7 @@ export default function HomePage() {
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="w-5 h-5 text-accent" />
                 <span className="text-[12px] font-bold text-accent uppercase tracking-wide">
-                  {locale === 'ar' ? 'المهمة النشطة' : 'Active Task'}
+                  {locale === 'ar' ? 'قرار اليوم' : 'Today\'s Focus'}
                 </span>
               </div>
 
@@ -160,7 +160,7 @@ export default function HomePage() {
                   ) : (
                     <>
                       <Play className="w-5 h-5" />
-                      {locale === 'ar' ? 'ابدأ' : 'Start'}
+                      {locale === 'ar' ? 'ابدأ' : 'Execute'}
                     </>
                   )}
                 </motion.button>
@@ -173,7 +173,7 @@ export default function HomePage() {
                     className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                   >
                     <Repeat className="w-4 h-4" />
-                    {locale === 'ar' ? 'إعادة جدولة' : 'Reschedule'}
+                    {locale === 'ar' ? 'إعادة جدولة' : 'Snooze'}
                   </motion.button>
 
                   <motion.button
@@ -183,7 +183,7 @@ export default function HomePage() {
                     className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                   >
                     <SkipForward className="w-4 h-4" />
-                    {locale === 'ar' ? 'تخطي' : 'Skip'}
+                    {locale === 'ar' ? 'تخطي' : 'Adjust'}
                   </motion.button>
                 </div>
               </div>
@@ -193,10 +193,10 @@ export default function HomePage() {
               <motion.div variants={itemVariants} className="glass-card p-5 mb-6">
                 <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-accent" />
-                  {locale === 'ar' ? 'توصيات اليوم' : "Today's Insights"}
+                  {locale === 'ar' ? 'توصيات اليوم' : "AI Insights"}
                 </h3>
                 <div className="space-y-2">
-                  {decision.recommendations.map((rec, idx) => (
+                  {decision.recommendations.slice(0, 3).map((rec, idx) => (
                     <div key={idx} className="flex items-start gap-2 text-[13px] text-muted-foreground">
                       <ChevronRight className="w-4 h-4 text-accent mt-0.5 shrink-0" />
                       <span>{rec}</span>
@@ -207,34 +207,6 @@ export default function HomePage() {
             )}
           </>
         )}
-
-        <motion.section variants={itemVariants} className="mb-8">
-          <h3 className="text-[16px] font-bold mb-4 text-foreground">
-            {locale === 'ar' ? 'إجراءات سريعة' : 'Quick Actions'}
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/tasks">
-              <motion.div
-                whileTap={{ scale: 0.95 }}
-                className="glass-card-hover glass-card p-4 cursor-pointer text-center"
-              >
-                <span className="text-[13px] font-semibold text-foreground">
-                  {locale === 'ar' ? 'جميع المهام' : 'All Tasks'}
-                </span>
-              </motion.div>
-            </Link>
-            <Link href="/insights">
-              <motion.div
-                whileTap={{ scale: 0.95 }}
-                className="glass-card-hover glass-card p-4 cursor-pointer text-center"
-              >
-                <span className="text-[13px] font-semibold text-foreground">
-                  {locale === 'ar' ? 'رؤى' : 'Insights'}
-                </span>
-              </motion.div>
-            </Link>
-          </div>
-        </motion.section>
       </motion.div>
     </PageWrapper>
   );

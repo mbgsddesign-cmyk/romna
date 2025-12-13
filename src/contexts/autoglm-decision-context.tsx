@@ -50,9 +50,15 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const response = await fetch(`/api/autoglm/orchestrate?userId=${user.id}`, {
         cache: 'no-store',
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`API returned ${response.status}`);
@@ -66,8 +72,13 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
         setDecision(null);
       }
     } catch (err: any) {
-      console.error('[AutoGLM Decision] Fetch error:', err);
-      setError(err.message || 'Failed to fetch decision');
+      if (err.name === 'AbortError') {
+        console.error('[AutoGLM Decision] Request timeout');
+        setError('Request timeout');
+      } else {
+        console.error('[AutoGLM Decision] Fetch error:', err);
+        setError(err.message || 'Failed to fetch decision');
+      }
       setDecision(null);
     } finally {
       setLoading(false);

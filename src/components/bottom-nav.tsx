@@ -10,7 +10,6 @@ import { motion } from 'framer-motion';
 
 const baseNavItems = [
   { href: '/', icon: Home, labelKey: 'home' as const },
-  { href: '/insights', icon: TrendingUp, labelKey: 'insights' as const },
   { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
   { href: '/voice', icon: Mic, labelKey: 'voice' as const },
   { href: '/settings', icon: Settings, labelKey: 'settings' as const },

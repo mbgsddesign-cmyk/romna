@@ -37,6 +37,9 @@ export async function POST(req: Request) {
             priority: 'high',
             status: 'pending',
             source: 'voice',
+            intent_type: 'reminder',
+            confidence: payload.confidence || null,
+            transcript: payload.transcript || null,
           })
           .select('id')
           .single();
@@ -65,6 +68,9 @@ export async function POST(req: Request) {
             priority: priority,
             status: 'pending',
             source: 'voice',
+            intent_type: 'task',
+            confidence: payload.confidence || null,
+            transcript: payload.transcript || null,
           })
           .select('id')
           .single();

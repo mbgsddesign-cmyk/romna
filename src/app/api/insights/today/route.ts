@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+export const revalidate = 60; // Revalidate every 60 seconds
+
 export async function GET(req: NextRequest) {
   try {
     const today = new Date();

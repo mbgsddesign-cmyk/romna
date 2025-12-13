@@ -16,6 +16,12 @@ export interface Task {
   priority: Priority;
   status: TaskStatus;
   createdAt: string;
+  source?: 'voice' | 'ai' | 'manual';
+  intent_type?: 'task' | 'reminder' | 'event';
+  confidence?: number;
+  transcript?: string;
+  ai_state?: 'actionable_now' | 'scheduled' | 'blocked' | 'low_priority' | 'overdue' | 'completed';
+  smart_action?: 'mark_done' | 'reschedule' | 'ask_romna' | 'snooze';
 }
 
 export interface Event {

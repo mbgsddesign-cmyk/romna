@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+export const revalidate = 30; // Revalidate every 30 seconds
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

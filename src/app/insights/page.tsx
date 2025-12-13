@@ -51,7 +51,7 @@ export default function InsightsPage() {
         
         const res = await fetch('/api/insights/today', {
           signal: controller.signal,
-          cache: 'no-store',
+          next: { revalidate: 60 },
         });
         
         clearTimeout(timeoutId);

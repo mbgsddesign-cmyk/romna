@@ -67,7 +67,7 @@ export default function NotificationsPage() {
       
       const res = await fetch(url, {
         signal: controller.signal,
-        cache: 'no-store',
+        next: { revalidate: 30 },
       });
       
       clearTimeout(timeoutId);

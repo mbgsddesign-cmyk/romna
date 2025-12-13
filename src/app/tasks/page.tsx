@@ -15,16 +15,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { SectionHeader, EmptyState, PriorityBadge } from '@/components/romna';
 import { Card } from '@/components/ui/card';
+import { computeAIState, shouldShowTaskNow, filterActionableTasks } from '@/lib/ai-workflow';
 
 type PriorityFilter = 'all' | Priority;
 
 function TasksContent() {
   const { t, locale } = useTranslation();
   const searchParams = useSearchParams();
-  const { tasks, addTask, toggleTaskStatus, deleteTask } = useAppStore();
+  const { tasks: zustandTasks, addTask, toggleTaskStatus, deleteTask } = useAppStore();
+  const [serverTasks, setServerTasks] = useState<any[]>([]);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', dueDate: '', priority: 'medium' as Priority });
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
@@ -32,21 +35,63 @@ function TasksContent() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    // Fetch server tasks with AI state
+    const fetchServerTasks = async () => {
+      try {
+        // TODO: Get actual userId from auth
+        const userId = '3a4bf508-5423-4f8c-87eb-8d9f63e20893';
+        const res = await fetch(`/api/tasks?userId=${userId}`, { next: { revalidate: 30 } });
+        const data = await res.json();
+        if (data.success) {
+          setServerTasks(data.tasks || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch server tasks:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchServerTasks();
+  }, []);
+
+  // Merge Zustand tasks with server tasks, applying AI filtering
+  const allTasks = [...zustandTasks, ...serverTasks.map(st => ({
+    id: st.id,
+    title: st.title,
+    description: st.description,
+    dueDate: st.due_date,
+    priority: st.priority as Priority,
+    status: st.status as 'pending' | 'done',
+    createdAt: st.created_at,
+    source: st.source,
+    intent_type: st.intent_type,
+    confidence: st.confidence,
+    transcript: st.transcript,
+    ai_state: st.ai_state,
+    smart_action: st.smart_action
+  }))];
+
   const filterTasks = (taskList: Task[]) => {
     if (priorityFilter === 'all') return taskList;
     return taskList.filter(task => task.priority === priorityFilter);
   };
 
+  // Apply AI-driven time & context filtering
+  const contextFilteredTasks = allTasks.filter(task => 
+    task.status !== 'done' && shouldShowTaskNow(task)
+  );
+
   const todayTasks = filterTasks(
-    tasks.filter((task) => task.dueDate && isToday(parseISO(task.dueDate)))
+    contextFilteredTasks.filter((task) => task.dueDate && isToday(parseISO(task.dueDate)))
   );
 
   const upcomingTasks = filterTasks(
-    tasks.filter((task) => task.dueDate && isFuture(parseISO(task.dueDate)) && !isToday(parseISO(task.dueDate)))
+    contextFilteredTasks.filter((task) => task.dueDate && isFuture(parseISO(task.dueDate)) && !isToday(parseISO(task.dueDate)))
   );
 
   const completedTasks = filterTasks(
-    tasks.filter((task) => task.status === 'done')
+    allTasks.filter((task) => task.status === 'done')
   );
 
   const handleAddTask = () => {

@@ -36,18 +36,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className="antialiased min-h-screen flex flex-col bg-background text-foreground">
+      <body className="antialiased min-h-screen flex flex-col bg-background text-foreground" style={{ fontFamily: "'Spline Sans', sans-serif" }}>
         <Providers>
-          <main className="flex-1 pb-20">
+          <main className="flex-1">
             {children}
           </main>
-          <BottomNav />
-          <AskRomnaButton />
           <AskRomnaDrawer />
           <Toaster 
             position="top-center" 

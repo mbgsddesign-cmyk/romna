@@ -1,573 +1,370 @@
-'use client';
-
-import { PageWrapper } from '@/components/page-wrapper';
-import { useTranslation } from '@/hooks/use-translation';
-import { motion } from 'framer-motion';
-import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight, RefreshCcw, AlertCircle, Mic } from 'lucide-react';
-import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import { useState, useEffect } from 'react';
-import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
-import { useRomnaAI } from '@/contexts/romna-ai-context';
-import { cn } from '@/lib/utils';
-
 export default function HomePage() {
-  const { t, locale } = useTranslation();
-  const { decision, loading, error, status, refetch } = useAutoGLMDecision();
-  const { openDrawer } = useRomnaAI();
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [hasAnimated, setHasAnimated] = useState(false);
-
-  useEffect(() => {
-    setHasAnimated(true);
-  }, []);
-
-  const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
-    if (actionLoading) return;
-    setActionLoading(action);
-    try {
-      const { supabase } = await import('@/lib/supabase');
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch('/api/autoglm/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          action,
-          taskId: decision?.active_task?.id,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        await refetch();
-      }
-    } catch (error) {
-      console.error('Action failed:', error);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const formatDecisionReason = (task: any) => {
-    if (!task?.ai_reason) return '';
-    
-    const reason = task.ai_reason;
-    const title = task.title;
-    
-    if (reason.includes('Overdue') && task.priority === 'high') {
-      return `This is overdue and high priority. ${locale === 'ar' ? 'ابدأ الآن' : 'Start now'}.`;
-    }
-    
-    if (reason.includes('High priority')) {
-      return `Because this is high priority, ${locale === 'ar' ? 'ركز عليه الآن' : 'focus on it now'}.`;
-    }
-    
-    return `${reason}. ${locale === 'ar' ? 'هذا هو الأفضل الآن' : 'This is the best next step'}.`;
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 }
-  };
-
   return (
-    <PageWrapper className="px-5">
-      <motion.div
-        key="home-content"
-        variants={containerVariants}
-        initial={hasAnimated ? false : "hidden"}
-        animate="visible"
-      >
-        <motion.header variants={itemVariants} className="pt-8 pb-6">
-          <h1 className="text-[28px] font-extrabold tracking-tight text-foreground">
-            {t('appName')}
-          </h1>
-          <p className="text-accent text-[14px] mt-0.5 font-medium">
-            {locale === 'ar' ? 'مركز القرارات الذكي' : 'AI Decision Center'}
-          </p>
-        </motion.header>
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden pb-24" style={{ background: '#09140f' }}>
+      {/* Header */}
+      <header className="pt-12 pb-2 px-6 flex flex-col items-start justify-end z-10">
+        <h1 className="text-3xl font-bold tracking-tight text-white mb-0.5">
+          ROMNA
+          <span className="inline-block w-2 h-2 ml-1 rounded-full mb-1" style={{ backgroundColor: '#f9f506', boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)' }}></span>
+        </h1>
+        <p className="text-gray-400 text-sm font-light tracking-wide opacity-80 uppercase">AI Decision Center</p>
+      </header>
 
-        {status === 'loading' ? (
-          <div className="glass-card p-8">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-accent/20 animate-pulse" />
-              <div className="h-4 w-48 bg-muted/20 rounded animate-pulse" />
-            </div>
-          </div>
-        ) : status === 'error' ? (
-          <motion.div variants={itemVariants} className="glass-card p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-destructive/50 mx-auto mb-4" />
-            <h2 className="text-[20px] font-bold text-foreground mb-2">
-              {locale === 'ar' ? 'فشل تحميل القرار' : 'Failed to load decision'}
-            </h2>
-            <p className="text-[14px] text-muted-foreground mb-6">
-              {error || (locale === 'ar' ? 'حدث خطأ. حاول مرة أخرى.' : 'Something went wrong. Try again.')}
-            </p>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={refetch}
-              disabled={loading}
-              className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
-            >
-              <RefreshCcw className="w-4 h-4" />
-              {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
-            </motion.button>
-          </motion.div>
-        ) : status === 'empty' || !decision?.active_task ? (
-          <motion.div variants={itemVariants} className="glass-card p-8 text-center">
-            <Brain className="w-16 h-16 text-accent/30 mx-auto mb-4" />
-            <h2 className="text-[20px] font-bold text-foreground mb-2">
-              {locale === 'ar' ? 'لا يوجد قرار نشط الآن' : 'No active decision right now'}
-            </h2>
-            <p className="text-[14px] text-muted-foreground mb-6">
-              {locale === 'ar' 
-                ? 'لا توجد مهام عاجلة أو أولويات حرجة في الوقت الحالي. هذا قرار واعٍ من ROMNA.'
-                : 'There are no urgent tasks or critical priorities right now. This is an intentional decision by ROMNA.'}
-            </p>
-            <p className="text-[13px] text-muted-foreground/80 mb-6">
-              {locale === 'ar' 
-                ? 'يمكنك إضافة مهمة جديدة أو أخذ استراحة قصيرة.'
-                : 'You can add a new task or take a short break.'}
-            </p>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={openDrawer}
-              className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow flex items-center justify-center gap-2 mx-auto"
-            >
-              <Mic className="w-4 h-4" />
-              {locale === 'ar' ? 'أضف مهمة بالصوت' : 'Add a task by voice'}
-            </motion.button>
-          </motion.div>
-        ) : (
-          <>
-            {/* 1️⃣ DECISION CARD */}
-            <motion.div variants={itemVariants} className="glass-card p-6 mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-accent" />
-                <span className="text-[12px] font-bold text-accent uppercase tracking-wide">
-                  {locale === 'ar' ? 'قرار اليوم' : 'Now'}
-                </span>
-              </div>
-
-              <h2 className="text-[22px] font-bold text-foreground mb-3 leading-tight">
-                {decision.active_task.title}
-              </h2>
-
-              <div className="flex items-center gap-2 mb-4">
-                <Badge className="bg-accent/20 text-accent border-0 text-[11px]">
-                  Priority {decision.active_task.ai_priority}/5
-                </Badge>
-                {decision.active_task.estimated_duration && (
-                  <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                    <Clock className="w-3.5 h-3.5" />
-                    {decision.active_task.estimated_duration}m
-                  </div>
-                )}
-                {decision.active_task.due_date && (
-                  <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {new Date(decision.active_task.due_date).toLocaleDateString(
-                      locale === 'ar' ? 'ar-EG' : 'en-US',
-                      { month: 'short', day: 'numeric' }
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 rounded-[14px] bg-muted/30 mb-6">
-                <div className="flex items-start gap-2">
-                  <Brain className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-[11px] font-bold text-accent uppercase tracking-wide mb-1">
-                      {locale === 'ar' ? 'لماذا الآن؟' : 'Why now?'}
-                    </p>
-                    <p className="text-[13px] text-foreground leading-relaxed">
-                      {formatDecisionReason(decision.active_task)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  disabled={actionLoading === 'start'}
-                  onClick={() => handleAction('start')}
-                  className="w-full px-6 py-4 rounded-[16px] bg-accent text-accent-foreground font-bold text-[15px] neon-glow flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {actionLoading === 'start' ? (
-                    <>{locale === 'ar' ? 'جاري التنفيذ...' : 'Processing...'}</>
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5" />
-                      {locale === 'ar' ? 'ابدأ الآن' : 'Execute'}
-                    </>
-                  )}
-                </motion.button>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    disabled={actionLoading === 'reschedule'}
-                    onClick={() => handleAction('reschedule')}
-                    className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <Repeat className="w-4 h-4" />
-                    {locale === 'ar' ? 'إعادة جدولة' : 'Snooze'}
-                  </motion.button>
-
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    disabled={actionLoading === 'skip'}
-                    onClick={() => handleAction('skip')}
-                    className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <SkipForward className="w-4 h-4" />
-                    {locale === 'ar' ? 'تخطي' : 'Adjust'}
-                  </motion.button>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* 2️⃣ TODAY/TOMORROW TIMELINE */}
-            <TodayTomorrowTimeline 
-              activeTask={decision.active_task}
-              locale={locale}
-            />
-
-            {/* 3️⃣ CALENDAR STRIP */}
-            <CalendarStrip 
-              activeTask={decision.active_task}
-              locale={locale}
-            />
-
-            {/* 4️⃣ INSIGHTS (Minimized) */}
-            {decision.recommendations && decision.recommendations.length > 0 && (
-              <motion.div variants={itemVariants} className="glass-card p-5 mb-6">
-                <h3 className="text-[13px] font-bold text-muted-foreground mb-3 flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-                  {locale === 'ar' ? 'ملاحظات' : 'Insights'}
-                </h3>
-                <div className="space-y-2">
-                  {decision.recommendations.slice(0, 2).map((rec, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-[12px] text-muted-foreground">
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
-                      <span>{rec}</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </>
-        )}
-      </motion.div>
-    </PageWrapper>
-  );
-}
-
-function TodayTomorrowTimeline({ activeTask, locale }: { activeTask: any; locale: string }) {
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const fetchEvents = async () => {
-      if (!isMounted) return;
-      
-      try {
-        const { supabase } = await import('@/lib/supabase');
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user || !isMounted) return;
-
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 2);
-        tomorrow.setHours(23, 59, 59, 999);
-
-        const { data, error } = await supabase
-          .from('events')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('start_time', today.toISOString())
-          .lte('start_time', tomorrow.toISOString())
-          .order('start_time');
-
-        if (!error && data && isMounted) {
-          setEvents(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch events:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchEvents();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTask?.id]);
-
-  if (loading) return null;
-
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const todayEvents = events.filter(e => {
-    const eventDate = new Date(e.start_time);
-    return eventDate.toDateString() === today.toDateString();
-  });
-
-  const tomorrowEvents = events.filter(e => {
-    const eventDate = new Date(e.start_time);
-    return eventDate.toDateString() === tomorrow.toDateString();
-  });
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glass-card p-5 mb-6"
-    >
-      <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
-        <Clock className="w-4 h-4 text-accent" />
-        {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
-      </h3>
-      
-      <div className="grid grid-cols-2 gap-3">
-        {/* Today */}
-        <div className="space-y-2">
-          <div className="text-[11px] font-bold text-accent uppercase tracking-wide">
-            {locale === 'ar' ? 'اليوم' : 'Today'}
-          </div>
-          {todayEvents.length > 0 ? (
-            <div className="space-y-2">
-              {todayEvents.slice(0, 2).map((event) => (
-                <div 
-                  key={event.id}
-                  className="p-2.5 rounded-[10px] bg-accent/10 border border-accent/20"
-                >
-                  <p className="text-[12px] font-semibold text-foreground mb-0.5 truncate">
-                    {event.title}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(event.start_time).toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-3 rounded-[10px] bg-muted/20 border border-muted/30">
-              <p className="text-[11px] text-muted-foreground">
-                {locale === 'ar' ? 'وقت فراغ' : 'Free time'}
-              </p>
-              <p className="text-[10px] text-accent mt-1">
-                {locale === 'ar' ? 'وقت جيد للتركيز' : 'Good time for focus'}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Tomorrow */}
-        <div className="space-y-2">
-          <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">
-            {locale === 'ar' ? 'غدًا' : 'Tomorrow'}
-          </div>
-          {tomorrowEvents.length > 0 ? (
-            <div className="space-y-2">
-              {tomorrowEvents.slice(0, 2).map((event) => (
-                <div 
-                  key={event.id}
-                  className="p-2.5 rounded-[10px] bg-muted/20 border border-muted/30"
-                >
-                  <p className="text-[12px] font-semibold text-foreground mb-0.5 truncate">
-                    {event.title}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(event.start_time).toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-3 rounded-[10px] bg-muted/20 border border-muted/30">
-              <p className="text-[11px] text-muted-foreground">
-                {locale === 'ar' ? 'وقت فراغ' : 'Free time'}
-              </p>
-              <p className="text-[10px] text-muted-foreground/70 mt-1">
-                {locale === 'ar' ? 'احجز وقت تركيز؟' : 'Block focus time?'}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function CalendarStrip({ activeTask, locale }: { activeTask: any; locale: string }) {
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const fetchEvents = async () => {
-      if (!isMounted) return;
-      
-      try {
-        const { supabase } = await import('@/lib/supabase');
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user || !isMounted) return;
-
-        const today = new Date();
-        const threeDaysOut = new Date(today);
-        threeDaysOut.setDate(threeDaysOut.getDate() + 3);
-
-        const { data, error } = await supabase
-          .from('events')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('start_time', today.toISOString())
-          .lte('start_time', threeDaysOut.toISOString())
-          .order('start_time');
-
-        if (!error && data && isMounted) {
-          setEvents(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch events:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchEvents();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTask?.id]);
-
-  if (loading) return null;
-
-  const today = new Date();
-  const next3Days = Array.from({ length: 3 }, (_, i) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() + i);
-    return date;
-  });
-
-  const getEventsForDay = (date: Date) => {
-    return events.filter(e => {
-      const eventDate = new Date(e.start_time);
-      return eventDate.toDateString() === date.toDateString();
-    });
-  };
-
-  const hasAnyEvents = events.length > 0;
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glass-card p-5 mb-6"
-    >
-      <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-accent" />
-        {locale === 'ar' ? 'الأيام القادمة' : 'Next Days'}
-      </h3>
-      
-      {!hasAnyEvents ? (
-        <div className="text-center py-3">
-          <p className="text-[13px] text-foreground mb-1">
-            {locale === 'ar' 
-              ? 'جدولك مفتوح.' 
-              : 'Your schedule is open.'}
-          </p>
-          <p className="text-[12px] text-muted-foreground">
-            {locale === 'ar' 
-              ? 'ROMNA يوصي بالتركيز أو الراحة.' 
-              : 'ROMNA recommends focus or rest.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          {next3Days.map((date, idx) => {
-            const dayEvents = getEventsForDay(date);
-            const isToday = idx === 0;
+      {/* Main Content */}
+      <main className="flex-1 px-4 space-y-6 overflow-y-auto no-scrollbar pb-10">
+        {/* NOW Card */}
+        <div className="group relative w-full rounded-[2.5rem] p-1 transition-transform duration-300 active:scale-[0.99]" style={{ 
+          backgroundColor: '#121e18',
+          boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.5)'
+        }}>
+          <div className="absolute inset-0 rounded-[2.5rem] pointer-events-none" style={{
+            background: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent)'
+          }}></div>
+          
+          <div className="relative flex flex-col h-full rounded-[2.2rem] p-6 overflow-hidden" style={{ backgroundColor: '#121e18' }}>
+            {/* Decorative glow */}
+            <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl" style={{ backgroundColor: 'rgba(249, 245, 6, 0.05)' }}></div>
             
-            return (
-              <div 
-                key={idx}
-                className={cn(
-                  "p-3 rounded-[12px] border transition-all",
-                  isToday 
-                    ? "bg-accent/10 border-accent/30" 
-                    : "bg-muted/10 border-muted/20"
-                )}
-              >
-                <div className={cn(
-                  "text-[10px] font-bold uppercase tracking-wide mb-2",
-                  isToday ? "text-accent" : "text-muted-foreground"
-                )}>
-                  {date.toLocaleDateString(locale === 'ar' ? 'ar-EG' : 'en-US', { 
-                    weekday: 'short',
-                    day: 'numeric'
-                  })}
-                </div>
-                
-                {dayEvents.length > 0 ? (
-                  <div className="space-y-1">
-                    {dayEvents.slice(0, 2).map((event) => (
-                      <div key={event.id} className="text-[10px] text-foreground/80 truncate">
-                        • {event.title}
-                      </div>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <div className="text-[9px] text-muted-foreground">
-                        +{dayEvents.length - 2} more
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-muted-foreground/60">
-                    {locale === 'ar' ? 'فارغ' : 'Free'}
-                  </div>
-                )}
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm tracking-wider animate-pulse" style={{ color: '#f9f506' }}>NOW</span>
+                <div className="h-1.5 w-1.5 rounded-full" style={{ 
+                  backgroundColor: '#f9f506',
+                  boxShadow: '0 0 8px rgba(249, 245, 6, 0.8)' 
+                }}></div>
               </div>
-            );
-          })}
+              <div className="flex items-center gap-1 text-xs text-gray-400 font-medium border rounded-full px-3 py-1" style={{
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)'
+              }}>
+                <span>Focus Mode</span>
+              </div>
+            </div>
+
+            {/* Task Content */}
+            <div className="flex flex-col gap-4 mb-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-1 p-2 rounded-full text-white ring-1" style={{
+                  backgroundColor: '#1a2921',
+                  ringColor: 'rgba(255, 255, 255, 0.1)'
+                }}>
+                  <span className="material-symbols-outlined material-symbols-outlined-fill">notifications_active</span>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold leading-tight text-white mb-2">Review Q3 projections</h2>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-black" style={{
+                      backgroundColor: 'rgba(249, 245, 6, 0.9)'
+                    }}>
+                      <span className="material-symbols-outlined text-[16px] font-bold">flag</span>
+                      <span className="text-[10px] font-bold uppercase">High Priority</span>
+                    </div>
+                    <div className="inline-flex items-center gap-1 border px-3 py-1 rounded-full text-gray-300" style={{
+                      borderColor: 'rgba(255, 255, 255, 0.1)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                    }}>
+                      <span className="text-[10px] font-medium uppercase tracking-wide">Work</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 mt-1 pl-14">
+                <span className="material-symbols-outlined text-gray-500 text-[18px]">psychology</span>
+                <p className="text-sm text-gray-400 font-light">Best time for analytical tasks.</p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-auto space-y-4">
+              <button className="relative w-full h-14 rounded-full flex items-center justify-center text-black font-bold text-lg tracking-wide overflow-hidden group/btn" style={{
+                backgroundColor: '#f9f506',
+                boxShadow: '0 0 20px rgba(249, 245, 6, 0.25)',
+                animation: 'pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+              }}>
+                <div className="absolute inset-0 scale-x-0 group-hover/btn:scale-x-100 transition-transform duration-500 origin-left" style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.3)'
+                }}></div>
+                <span className="relative z-10 flex items-center gap-2">
+                  <span className="material-symbols-outlined">play_arrow</span>
+                  Execute
+                </span>
+              </button>
+              
+              <div className="flex justify-center gap-8 opacity-80">
+                <button className="text-xs font-medium text-gray-400 hover:text-[#f9f506] transition-colors flex items-center gap-1.5 py-2 px-4 rounded-full hover:bg-white/5">
+                  <span className="material-symbols-outlined text-[16px]">snooze</span>
+                  Snooze
+                </button>
+                <button className="text-xs font-medium text-gray-400 hover:text-[#f9f506] transition-colors flex items-center gap-1.5 py-2 px-4 rounded-full hover:bg-white/5">
+                  <span className="material-symbols-outlined text-[16px]">tune</span>
+                  Adjust
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
-    </motion.div>
+
+        {/* Calendar Section */}
+        <div className="flex flex-col gap-6 pt-2">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2 group cursor-pointer">
+              <h2 className="text-xl font-bold text-white tracking-tight">October <span className="text-gray-500 font-normal">2023</span></h2>
+              <span className="material-symbols-outlined text-gray-500 group-hover:text-[#f9f506] transition-colors text-sm">expand_more</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-white border active:scale-95 transition-all" style={{
+                backgroundColor: '#1a2921',
+                borderColor: 'rgba(255, 255, 255, 0.05)'
+              }}>
+                <span className="material-symbols-outlined text-sm">chevron_left</span>
+              </button>
+              <button className="w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-white border active:scale-95 transition-all" style={{
+                backgroundColor: '#1a2921',
+                borderColor: 'rgba(255, 255, 255, 0.05)'
+              }}>
+                <span className="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+              <button className="ml-2 w-9 h-9 rounded-full flex items-center justify-center text-black font-bold active:scale-95 transition-all hover:bg-white" style={{
+                backgroundColor: '#f9f506',
+                boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)'
+              }}>
+                <span className="material-symbols-outlined text-lg font-bold">add</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Calendar Strip */}
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x px-1">
+            {/* Active Day */}
+            <div className="snap-start flex flex-col items-center justify-center gap-1 min-w-[3.8rem] h-[5.5rem] rounded-[1.8rem] transform transition-transform hover:scale-105 cursor-pointer" style={{
+              background: 'linear-gradient(to bottom right, #f9f506, #e6d800)',
+              boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)'
+            }}>
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: 'rgba(0, 0, 0, 0.6)' }}>Mon</span>
+              <span className="text-2xl font-bold text-black leading-none">16</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-black mt-1"></div>
+            </div>
+
+            {/* Inactive Days */}
+            {[
+              { day: 'Tue', date: '17', active: true },
+              { day: 'Wed', date: '18', active: false },
+              { day: 'Thu', date: '19', active: false },
+              { day: 'Fri', date: '20', active: false },
+            ].map((item, idx) => (
+              <div key={idx} className="snap-start flex flex-col items-center justify-center gap-1 min-w-[3.8rem] h-[5.5rem] border rounded-[1.8rem] text-gray-400 hover:bg-[#23362b] hover:border-white/10 transition-all cursor-pointer group" style={{
+                backgroundColor: item.active ? '#1a2921' : '#121e18',
+                borderColor: 'rgba(255, 255, 255, 0.05)'
+              }}>
+                <span className={`text-xs font-medium group-hover:text-gray-300 uppercase tracking-wide ${item.active ? 'text-gray-400' : 'text-gray-500'}`}>{item.day}</span>
+                <span className={`text-2xl font-bold leading-none ${item.active ? 'text-white' : 'text-gray-300'}`}>{item.date}</span>
+                <div className={`w-1.5 h-1.5 rounded-full mt-1 ${item.active ? 'bg-white/20 group-hover:bg-[#f9f506]/50' : 'bg-transparent'}`}></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Timeline */}
+          <div className="relative min-h-[400px] timeline-line">
+            {/* NOW Line */}
+            <div className="absolute top-[180px] left-[27px] right-0 h-[1px] z-20 flex items-center" style={{
+              background: 'linear-gradient(to right, #f9f506, rgba(249, 245, 6, 0.5), transparent)'
+            }}>
+              <div className="absolute -left-[4px] w-2.5 h-2.5 rounded-full" style={{
+                backgroundColor: '#f9f506',
+                boxShadow: '0 0 10px rgba(249, 245, 6, 0.5), 0 0 20px rgba(249, 245, 6, 0.3)'
+              }}></div>
+              <div className="ml-4 px-2 py-0.5 rounded text-[10px] font-bold" style={{
+                backgroundColor: 'rgba(249, 245, 6, 0.2)',
+                color: '#f9f506'
+              }}>14:24 NOW</div>
+            </div>
+
+            <div className="space-y-6 pb-20">
+              {/* Completed Tasks */}
+              {[
+                { time: '09:00', title: 'Morning Standup', color: 'rgba(59, 130, 246, 0.8)', completed: true, label: 'Completed' },
+                { time: '10:30', title: 'Client Call: TechCorp', color: 'rgba(168, 85, 247, 0.8)', completed: true, tags: [{ text: 'Sales', color: 'gray' }, { text: '45m', plain: true }] },
+              ].map((task, idx) => (
+                <div key={idx} className="relative flex gap-4 group">
+                  <div className="w-14 text-right text-xs text-gray-500 font-medium pt-3 opacity-60">{task.time}</div>
+                  <div className="flex-1 border rounded-2xl p-4 relative overflow-hidden active:scale-[0.98] transition-transform" style={{
+                    backgroundColor: '#121e18',
+                    borderColor: 'rgba(255, 255, 255, 0.05)'
+                  }}>
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: task.color }}></div>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-gray-300 font-medium text-sm opacity-60" style={{
+                          textDecoration: 'line-through',
+                          textDecorationColor: '#6b7280',
+                          textDecorationThickness: '1px'
+                        }}>{task.title}</h4>
+                        {task.label && <p className="text-xs text-gray-600 mt-1">{task.label}</p>}
+                        {task.tags && (
+                          <div className="flex items-center gap-2 mt-2 opacity-50">
+                            {task.tags.map((tag, i) => (
+                              tag.plain ? (
+                                <span key={i} className="text-xs text-gray-500">{tag.text}</span>
+                              ) : (
+                                <span key={i} className="text-[10px] text-gray-400 border border-gray-700 px-1.5 py-0.5 rounded">{tag.text}</span>
+                              )
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {task.completed && (
+                        <span className="material-symbols-outlined text-sm" style={{ color: '#10b981' }}>check_circle</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Active Task */}
+              <div className="relative flex gap-4 group">
+                <div className="w-14 text-right text-xs font-bold pt-3" style={{
+                  color: '#f9f506',
+                  filter: 'drop-shadow(0 0 5px rgba(249, 245, 6, 0.5))'
+                }}>14:00</div>
+                <div className="flex-1 border rounded-2xl p-4 relative overflow-hidden active:scale-[0.98] transition-transform" style={{
+                  background: 'linear-gradient(to right, #1a2921, #121e18)',
+                  borderColor: 'rgba(249, 245, 6, 0.3)',
+                  boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.5)'
+                }}>
+                  <div className="absolute left-0 top-0 bottom-0 w-1" style={{
+                    backgroundColor: '#f9f506',
+                    boxShadow: '0 0 10px rgba(249, 245, 6, 0.5), 0 0 20px rgba(249, 245, 6, 0.3)'
+                  }}></div>
+                  <div className="flex justify-between items-start mb-1">
+                    <h4 className="text-white font-bold text-base">Review Q3 Projections</h4>
+                    <span className="material-symbols-outlined text-sm animate-pulse" style={{ color: '#f9f506' }}>timelapse</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-3">Preparation for board meeting.</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2">
+                      <img alt="User" className="w-6 h-6 rounded-full border" style={{ borderColor: '#1a2921' }} src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkV1I7jl3o-D5lQky9QTBvoHOGV7wM8qb4BdA4XSPFp0DCr3DSocMdKwQm0QZDkCmO1U6YeiJfyEdpYRQjmVUaWUugrrf7PEGIFvZFI-8F909gXrylrrp9UMqA-SQNFTPXXrZi9kx6qRserw-4w_UKH7fy9TFKpxXfi4Ir3682IVrGiMFPJ-TORjY2ubkQRngJ1RDDTWmgq5mHSYaW84ZwBSInyIftJ2T-8cTGuNc_NIXEGyx-o6JpQpdgTUegkj2U4-sDCYm-Se8" />
+                      <img alt="User" className="w-6 h-6 rounded-full border" style={{ borderColor: '#1a2921' }} src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsQ6inBKjeazw-AF4tzaiC7L-h375AGQxFSEq91Y0zquKva5hyMTBfiCkA4ni9bgHrNhUF4xs4UFY92ETMjD_gy4NOfIXJTx1tRivk2rvfsgXD3YFfpIFTUW4cSMZn01cI4Gi1TintyThXN-sMW_fTrr8vRIo8-YnukoMohmQH5oYeNczvYE8ozurvk_274cM4obR7bldANMS5XY1ZBP38cFfzQaBwlWn_-8sM0UDBolYstMvSKivN1TvWVgHzVdKUGdyFg4gfvn0" />
+                    </div>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded" style={{
+                      color: '#f9f506',
+                      backgroundColor: 'rgba(249, 245, 6, 0.1)'
+                    }}>Work</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upcoming Task */}
+              <div className="relative flex gap-4 group">
+                <div className="w-14 text-right text-xs text-gray-400 font-medium pt-3">16:30</div>
+                <div className="flex-1 border rounded-2xl p-4 relative overflow-hidden active:scale-[0.98] transition-transform hover:bg-[#1a2921]/50" style={{
+                  backgroundColor: '#121e18',
+                  borderColor: 'rgba(255, 255, 255, 0.05)'
+                }}>
+                  <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: 'rgba(251, 146, 60, 0.8)' }}></div>
+                  <h4 className="text-white font-medium text-sm">Pick up laundry</h4>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-xs text-gray-500">Personal • 15m</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Insight Card */}
+              <div className="relative flex gap-4 mt-6">
+                <div className="w-14 flex justify-end pt-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{
+                    backgroundColor: 'rgba(249, 245, 6, 0.1)',
+                    color: '#f9f506'
+                  }}>
+                    <span className="material-symbols-outlined text-sm">auto_graph</span>
+                  </div>
+                </div>
+                <div className="flex-1 border rounded-2xl p-4 flex items-center justify-between" style={{
+                  backgroundColor: 'rgba(26, 40, 33, 0.4)',
+                  borderColor: 'rgba(255, 255, 255, 0.05)'
+                }}>
+                  <div>
+                    <p className="text-sm font-bold text-white">Productivity Insight</p>
+                    <p className="text-xs text-gray-400 mt-0.5">You usually complete 'Work' tasks 15% faster in the afternoon.</p>
+                  </div>
+                  <button className="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-white" style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                  }}>
+                    <span className="material-symbols-outlined text-xs">close</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Task */}
+              <div className="relative flex gap-4 group opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
+                <div className="w-14 text-right text-xs text-gray-500 font-medium pt-2">18:00</div>
+                <div className="flex-1 h-12 border border-dashed rounded-2xl flex items-center px-4 hover:border-[#f9f506]/50 hover:bg-[#f9f506]/5" style={{
+                  borderColor: 'rgba(255, 255, 255, 0.1)'
+                }}>
+                  <span className="text-xs text-gray-500 italic">+ Add task</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-24"></div>
+      </main>
+
+      {/* Floating AI Button */}
+      <button className="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full border flex items-center justify-center group active:scale-90 transition-all duration-300" style={{
+        backgroundColor: '#1a2921',
+        borderColor: 'rgba(249, 245, 6, 0.2)',
+        boxShadow: '0 0 15px rgba(249, 245, 6, 0.15)',
+        color: '#f9f506'
+      }}>
+        <span className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ backgroundColor: 'rgba(249, 245, 6, 0.05)' }}></span>
+        <span className="material-symbols-outlined animate-rotate-slow group-hover:text-white transition-colors">smart_toy</span>
+      </button>
+
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 w-full z-50">
+        <div className="absolute bottom-0 w-full h-32 pointer-events-none" style={{
+          background: 'linear-gradient(to top, #09140f, rgba(9, 20, 15, 0.95), transparent)'
+        }}></div>
+        <div className="relative border-t pb-8 pt-2 px-6" style={{
+          backgroundColor: 'rgba(9, 20, 15, 0.8)',
+          backdropFilter: 'blur(24px)',
+          borderColor: 'rgba(255, 255, 255, 0.05)'
+        }}>
+          <div className="flex items-end justify-between">
+            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group">
+              <span className="material-symbols-outlined group-hover:scale-110 transition-transform" style={{ color: '#f9f506' }}>home_app_logo</span>
+              <div className="w-1 h-1 rounded-full" style={{
+                backgroundColor: '#f9f506',
+                boxShadow: '0 0 5px #f9f506'
+              }}></div>
+            </div>
+            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
+              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">search</span>
+              <div className="w-1 h-1 rounded-full bg-transparent"></div>
+            </div>
+            <div className="relative -top-5 cursor-pointer group">
+              <div className="absolute inset-0 rounded-full blur-xl" style={{ backgroundColor: 'rgba(249, 245, 6, 0.2)' }}></div>
+              <div className="relative w-16 h-16 rounded-full border flex items-center justify-center shadow-lg transition-transform duration-200 group-active:scale-95" style={{
+                background: 'linear-gradient(to bottom right, #1a2921, black)',
+                borderColor: 'rgba(249, 245, 6, 0.3)'
+              }}>
+                <span className="material-symbols-outlined text-3xl group-hover:animate-pulse" style={{ color: '#f9f506' }}>mic</span>
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
+              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">calendar_month</span>
+              <div className="w-1 h-1 rounded-full bg-transparent"></div>
+            </div>
+            <div className="flex flex-col items-center gap-1 w-12 cursor-pointer group opacity-50 hover:opacity-100 transition-opacity">
+              <span className="material-symbols-outlined text-white group-hover:scale-110 transition-transform">settings</span>
+              <div className="w-1 h-1 rounded-full bg-transparent"></div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </div>
   );
 }

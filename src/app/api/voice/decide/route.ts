@@ -108,13 +108,41 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
       });
       
     } else if (
-      /remind me to|ذكرني ب|reminder|تذكير/i.test(normalizedTranscript)
+      /remind|ذكرني|reminder|تذكير/i.test(normalizedTranscript)
     ) {
       intent = 'create_reminder';
       action = 'create_reminder';
 
       const classified = AIEngineService.classifyIntent(transcript, locale);
-      const reminderTitle = `🔔 ${classified.entities.title as string || transcript.replace(/remind me to|ذكرني ب|reminder|تذكير/gi, '').trim()}`;
+      
+      // Parse "after X hours/minutes" pattern (supports numbers and words)
+      let reminderDate = new Date(Date.now() + 3600000); // default 1 hour
+      
+      const wordToNumber: Record<string, number> = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+      };
+      
+      const afterMatch = transcript.match(/after\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(hour|minute|min)s?/i);
+      if (afterMatch) {
+        const rawAmount = afterMatch[1].toLowerCase();
+        const amount = isNaN(Number(rawAmount)) ? (wordToNumber[rawAmount] || 1) : parseInt(rawAmount);
+        const unit = afterMatch[2].toLowerCase();
+        const milliseconds = unit.startsWith('hour') ? amount * 3600000 : amount * 60000;
+        reminderDate = new Date(Date.now() + milliseconds);
+      } else if (classified.entities.date) {
+        reminderDate = new Date(classified.entities.date as string);
+      }
+      
+      const reminderText = transcript
+        .replace(/after\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(hour|minute|min)s?\s*,?\s*/gi, '')
+        .replace(/remind\s+me\s+(to|for|about)?\s*/gi, '')
+        .replace(/^\s*,\s*/, '') // Remove leading comma
+        .replace(/ذكرني ب/gi, '')
+        .replace(/[,\.]+$/g, '') // Remove trailing punctuation
+        .trim();
+      
+      const reminderTitle = `🔔 ${classified.entities.title as string || reminderText || 'Reminder'}`;
       
       const { data: newReminder, error: reminderError } = await supabase
         .from('tasks')
@@ -124,7 +152,7 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
           priority: 'high',
           status: 'pending',
           source: 'voice',
-          due_date: (classified.entities.date as string) || new Date(Date.now() + 3600000).toISOString(),
+          due_date: reminderDate.toISOString(),
         })
         .select()
         .single();
@@ -141,7 +169,7 @@ export async function POST(request: Request): Promise<NextResponse<VoiceDecision
         user_id: userId,
         raw_text: transcript,
         intent_type: 'reminder',
-        extracted_data: { reminderId: newReminder.id, title: reminderTitle },
+        extracted_data: { reminderId: newReminder.id, title: reminderTitle, due_date: reminderDate.toISOString() },
         success: true,
       });
 

@@ -3,15 +3,17 @@
 import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
-import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight, RefreshCcw, AlertCircle } from 'lucide-react';
+import { Sparkles, Brain, Clock, Calendar, Play, SkipForward, Repeat, ChevronRight, RefreshCcw, AlertCircle, Mic } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
+import { useRomnaAI } from '@/contexts/romna-ai-context';
 
 export default function HomePage() {
   const { t, locale } = useTranslation();
   const { decision, loading, error, status, refetch } = useAutoGLMDecision();
+  const { openDrawer } = useRomnaAI();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
@@ -125,21 +127,26 @@ export default function HomePage() {
           <motion.div variants={itemVariants} className="glass-card p-8 text-center">
             <Brain className="w-16 h-16 text-accent/30 mx-auto mb-4" />
             <h2 className="text-[20px] font-bold text-foreground mb-2">
-              {locale === 'ar' ? 'لا توجد مهام نشطة' : 'No active task'}
+              {locale === 'ar' ? 'لا يوجد قرار نشط الآن' : 'No active decision right now'}
             </h2>
             <p className="text-[14px] text-muted-foreground mb-6">
-              {decision?.active_task_reason || (locale === 'ar' 
-                ? 'رائع! لا توجد مهام عاجلة الآن. أضف مهمة جديدة أو استرح.'
-                : 'Great! No urgent tasks right now. Add a new task or take a break.')}
+              {locale === 'ar' 
+                ? 'لا توجد مهام عاجلة أو أولويات حرجة في الوقت الحالي. هذا قرار واعٍ من ROMNA.'
+                : 'There are no urgent tasks or critical priorities right now. This is an intentional decision by ROMNA.'}
             </p>
-            <Link href="/tasks?action=new">
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow"
-              >
-                {locale === 'ar' ? 'إضافة مهمة جديدة' : 'Add New Task'}
-              </motion.button>
-            </Link>
+            <p className="text-[13px] text-muted-foreground/80 mb-6">
+              {locale === 'ar' 
+                ? 'يمكنك إضافة مهمة جديدة أو أخذ استراحة قصيرة.'
+                : 'You can add a new task or take a short break.'}
+            </p>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={openDrawer}
+              className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow flex items-center justify-center gap-2 mx-auto"
+            >
+              <Mic className="w-4 h-4" />
+              {locale === 'ar' ? 'أضف مهمة بالصوت' : 'Add a task by voice'}
+            </motion.button>
           </motion.div>
         ) : (
           <>

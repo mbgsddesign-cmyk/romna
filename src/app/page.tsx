@@ -3,75 +3,41 @@
 import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
-import { Sparkles, TrendingUp, Target, Zap, Bell, BellDot, Brain, Lightbulb, Calendar, Mail, MessageSquare, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Sparkles, Brain, Clock, ChevronRight, Calendar, Play, SkipForward, Repeat } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { HomeSkeleton } from '@/components/skeletons/home-skeleton';
 
-interface Insight {
-  id: string;
-  type: string;
-  title: string;
-  content: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  category: string;
-  created_at: string;
-}
-
-interface NotificationPreview {
+interface ActiveTask {
   id: string;
   title: string;
-  message: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  is_read: boolean;
-  created_at: string;
+  state: 'active' | 'pending' | 'blocked' | 'done';
+  ai_priority: number;
+  ai_reason: string;
+  due_date?: string;
+  estimated_duration?: number;
 }
 
-interface AutoGLMSuggestion {
-  id: string;
-  suggestion_type: string;
-  payload: any;
-  explanation: string;
-  confidence: number;
-  priority: string;
-}
-
-interface TimelineBlock {
-  time: string;
-  duration: number;
-  task_ids: string[];
-  type: 'focus' | 'event' | 'break';
-  reason: string;
+interface DayDecision {
+  active_task: ActiveTask | null;
+  active_task_reason: string;
+  next_actions: string[];
+  recommendations: string[];
 }
 
 export default function HomePage() {
   const { t, locale } = useTranslation();
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
-  const [suggestions, setSuggestions] = useState<AutoGLMSuggestion[]>([]);
-  const [todayPlan, setTodayPlan] = useState<TimelineBlock[]>([]);
+  const [decision, setDecision] = useState<DayDecision | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-    
-    // Prefetch on page load
-    const prefetchLinks = () => {
-      const router = require('next/navigation').useRouter;
-      if (typeof window !== 'undefined') {
-        fetch('/api/insights/today', { cache: 'force-cache' });
-        fetch('/api/notifications/all', { cache: 'force-cache' });
-      }
-    };
-    
-    prefetchLinks();
+    fetchDayDecision();
   }, []);
 
-  const fetchData = async () => {
+  const fetchDayDecision = async () => {
     try {
-      // Get user from Supabase auth
       const { supabase } = await import('@/lib/supabase');
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -80,68 +46,55 @@ export default function HomePage() {
         return;
       }
 
-      const [insightsRes, notificationsRes, suggestionsRes, planRes] = await Promise.allSettled([
-        fetch('/api/insights/today', { cache: 'no-store' }).then(r => r.json()),
-        fetch('/api/notifications/all?limit=3', { cache: 'no-store' }).then(r => r.json()),
-        fetch(`/api/autoglm/suggestions?userId=${user.id}`, { cache: 'no-store' }).then(r => r.json()),
-        fetch(`/api/autoglm/run?userId=${user.id}`, { cache: 'no-store' }).then(r => r.json()),
-      ]);
-
-      if (insightsRes.status === 'fulfilled' && insightsRes.value.success) {
-        setInsights(insightsRes.value.insights?.slice(0, 3) || []);
-      }
-
-      if (notificationsRes.status === 'fulfilled' && notificationsRes.value.success) {
-        setNotifications(notificationsRes.value.notifications?.slice(0, 3) || []);
-      }
-
-      if (suggestionsRes.status === 'fulfilled' && suggestionsRes.value.success) {
-        setSuggestions(suggestionsRes.value.suggestions?.slice(0, 3) || []);
-      }
-
-      if (planRes.status === 'fulfilled' && planRes.value.success && planRes.value.run) {
-        const planData = JSON.parse(planRes.value.run.context_snapshot?.daily_plan || '{}');
-        setTodayPlan(planData.timeline_blocks || []);
+      const response = await fetch(`/api/autoglm/orchestrate?userId=${user.id}`, {
+        cache: 'no-store'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setDecision(data.decision);
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch day decision:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSuggestionAction = async (suggestionId: string, action: 'accept' | 'reject') => {
+  const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
+    setActionLoading(action);
     try {
       const { supabase } = await import('@/lib/supabase');
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) return;
 
-      const response = await fetch('/api/autoglm/suggestions', {
+      const response = await fetch('/api/autoglm/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          suggestion_id: suggestionId,
+          userId: user.id,
           action,
-          user_id: user.id,
+          taskId: decision?.active_task?.id,
         }),
       });
 
       if (response.ok) {
-        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        await fetchDayDecision();
       }
     } catch (error) {
-      console.error('Failed to handle suggestion:', error);
+      console.error('Action failed:', error);
+    } finally {
+      setActionLoading(null);
     }
   };
-
-  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: { staggerChildren: 0.08 }
+      transition: { staggerChildren: 0.1 }
     }
   };
 
@@ -158,329 +111,178 @@ export default function HomePage() {
         animate="visible"
       >
         <motion.header variants={itemVariants} className="pt-8 pb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-[28px] font-extrabold tracking-tight text-foreground">
-                {t('appName')}
-              </h1>
-              <p className="text-accent text-[14px] mt-0.5 font-medium">
-                {t('yourDailyAIAssistant')}
-              </p>
-            </div>
-            <Link href="/notifications">
-              <motion.div 
-                whileTap={{ scale: 0.95 }}
-                className="relative"
-              >
-                <div className={cn(
-                  "w-12 h-12 rounded-[18px] flex items-center justify-center transition-all glass-card",
-                  unreadCount > 0 && "neon-glow"
-                )}>
-                  {unreadCount > 0 ? (
-                    <BellDot className="w-5 h-5 text-accent" />
-                  ) : (
-                    <Bell className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </div>
-                {unreadCount > 0 && (
-                  <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-accent flex items-center justify-center neon-glow">
-                    <span className="text-[11px] font-bold text-background">{unreadCount}</span>
-                  </div>
-                )}
-              </motion.div>
-            </Link>
-          </div>
+          <h1 className="text-[28px] font-extrabold tracking-tight text-foreground">
+            {t('appName')}
+          </h1>
+          <p className="text-accent text-[14px] mt-0.5 font-medium">
+            {locale === 'ar' ? 'منظم يومك الذكي' : 'Your AI Day Orchestrator'}
+          </p>
         </motion.header>
 
-        <motion.section variants={itemVariants} className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[18px] font-bold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-accent" />
-              {t('aiInsights')}
-            </h2>
-            <Link href="/insights">
-              <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
-            </Link>
+        {loading ? (
+          <div className="glass-card p-8">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-accent/20 animate-pulse" />
+              <div className="h-4 w-48 bg-muted/20 rounded animate-pulse" />
+            </div>
           </div>
-
-          {loading ? (
-            <HomeSkeleton />
-          ) : insights.length > 0 ? (
-            <div className="space-y-3">
-              {insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} locale={locale} t={t} />
-              ))}
-            </div>
-          ) : (
-            <div className="glass-card p-8 text-center">
-              <Brain className="w-12 h-12 text-accent/50 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                {t('noNewInsightsToday')}
-              </p>
-            </div>
-          )}
-        </motion.section>
-
-        {/* Today's Plan from AutoGLM */}
-        <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-accent" />
-            {locale === 'ar' ? 'خطة اليوم' : "Today's Plan"}
-          </h2>
-          {todayPlan.length > 0 ? (
-            <div className="space-y-3">
-              {todayPlan.map((block, idx) => (
-                <div key={idx} className="glass-card p-4 hover:bg-muted/5 transition-colors">
-                  <div className="flex items-start gap-4">
-                    <div className="w-20 h-20 rounded-[16px] bg-gradient-to-br from-accent/20 to-accent/5 flex flex-col items-center justify-center neon-glow shrink-0">
-                      <span className="text-[20px] font-bold text-accent">{block.time}</span>
-                      <span className="text-[10px] text-accent/70 font-medium">{block.duration}m</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className={cn(
-                          "text-[10px] h-5 border-0",
-                          block.type === 'focus' && "bg-purple-500/20 text-purple-400",
-                          block.type === 'event' && "bg-blue-500/20 text-blue-400",
-                          block.type === 'break' && "bg-green-500/20 text-green-400"
-                        )}>
-                          {block.type}
-                        </Badge>
-                      </div>
-                      <p className="text-[15px] font-semibold text-foreground leading-tight mb-2">
-                        {block.reason}
-                      </p>
-                      {block.task_ids && block.task_ids.length > 0 && (
-                        <p className="text-[12px] text-muted-foreground">
-                          {block.task_ids.length} {locale === 'ar' ? 'مهمة' : 'task(s)'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="glass-card p-8 text-center">
-              <Clock className="w-12 h-12 text-accent/30 mx-auto mb-3" />
-              <p className="text-[14px] text-muted-foreground mb-4">
-                {locale === 'ar' 
-                  ? 'لا توجد خطة لليوم بعد'
-                  : 'No plan generated yet'}
-              </p>
-              <p className="text-[12px] text-muted-foreground">
-                {locale === 'ar'
-                  ? 'قم بتشغيل AutoGLM في الإعدادات للحصول على خطط يومية ذكية'
-                  : 'Enable AutoGLM in Settings to get smart daily plans'}
-              </p>
-            </div>
-          )}
-        </motion.section>
-
-        {suggestions.length > 0 && (
-          <motion.section variants={itemVariants} className="mb-6">
-            <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-accent" />
-              AI Suggestions
+        ) : !decision?.active_task ? (
+          <motion.div variants={itemVariants} className="glass-card p-8 text-center">
+            <Brain className="w-16 h-16 text-accent/30 mx-auto mb-4" />
+            <h2 className="text-[20px] font-bold text-foreground mb-2">
+              {locale === 'ar' ? 'لا توجد مهام نشطة' : 'No active task'}
             </h2>
-            <div className="space-y-3">
-              {suggestions.map((suggestion) => (
-                <div key={suggestion.id} className="glass-card p-5">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-[14px] bg-accent/20 flex items-center justify-center shrink-0 neon-glow">
-                      <Sparkles className="w-5 h-5 text-accent" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-foreground mb-2">
-                        {suggestion.explanation}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-accent/20 text-accent text-[11px] h-5 border-0">
-                          {Math.round(suggestion.confidence * 100)}% confident
-                        </Badge>
-                        <Badge className="bg-primary/20 text-primary text-[11px] h-5 border-0">
-                          {suggestion.suggestion_type}
-                        </Badge>
-                      </div>
-                    </div>
+            <p className="text-[14px] text-muted-foreground mb-6">
+              {decision?.active_task_reason || (locale === 'ar' 
+                ? 'لا توجد مهام للعمل عليها الآن'
+                : 'No tasks to work on right now.')}
+            </p>
+            <Link href="/tasks?action=new">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-3 rounded-[16px] bg-accent text-accent-foreground font-semibold text-[14px] neon-glow"
+              >
+                {locale === 'ar' ? 'إضافة مهمة جديدة' : 'Add New Task'}
+              </motion.button>
+            </Link>
+          </motion.div>
+        ) : (
+          <>
+            <motion.div variants={itemVariants} className="glass-card p-6 mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-accent" />
+                <span className="text-[12px] font-bold text-accent uppercase tracking-wide">
+                  {locale === 'ar' ? 'المهمة النشطة' : 'Active Task'}
+                </span>
+              </div>
+
+              <h2 className="text-[22px] font-bold text-foreground mb-3 leading-tight">
+                {decision.active_task.title}
+              </h2>
+
+              <div className="flex items-center gap-2 mb-4">
+                <Badge className="bg-accent/20 text-accent border-0 text-[11px]">
+                  Priority {decision.active_task.ai_priority}/5
+                </Badge>
+                {decision.active_task.estimated_duration && (
+                  <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                    <Clock className="w-3.5 h-3.5" />
+                    {decision.active_task.estimated_duration}m
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSuggestionAction(suggestion.id, 'accept')}
-                      className="flex-1 px-4 py-2 rounded-[12px] bg-accent/20 hover:bg-accent/30 text-accent font-semibold text-[14px] transition-all neon-glow"
-                    >
-                      ✓ Approve
-                    </button>
-                    <button
-                      onClick={() => handleSuggestionAction(suggestion.id, 'reject')}
-                      className="flex-1 px-4 py-2 rounded-[12px] bg-muted/20 hover:bg-muted/30 text-muted-foreground font-semibold text-[14px] transition-all"
-                    >
-                      × Ignore
-                    </button>
+                )}
+                {decision.active_task.due_date && (
+                  <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {new Date(decision.active_task.due_date).toLocaleDateString(
+                      locale === 'ar' ? 'ar-EG' : 'en-US',
+                      { month: 'short', day: 'numeric' }
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 rounded-[14px] bg-muted/30 mb-6">
+                <div className="flex items-start gap-2">
+                  <Brain className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[11px] font-bold text-accent uppercase tracking-wide mb-1">
+                      {locale === 'ar' ? 'لماذا الآن؟' : 'Why now?'}
+                    </p>
+                    <p className="text-[13px] text-foreground leading-relaxed">
+                      {decision.active_task.ai_reason}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </motion.section>
-        )}
+              </div>
 
-        {notifications.length > 0 && (
-          <motion.section variants={itemVariants} className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[18px] font-bold">{t('notifications')}</h2>
-              <Link href="/notifications">
-                <span className="text-[14px] text-accent font-semibold hover:underline">{t('viewAll')}</span>
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {notifications.map((notification) => (
-                <NotificationCard key={notification.id} notification={notification} locale={locale} />
-              ))}
-            </div>
-          </motion.section>
+              <div className="space-y-2">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  disabled={actionLoading === 'start'}
+                  onClick={() => handleAction('start')}
+                  className="w-full px-6 py-4 rounded-[16px] bg-accent text-accent-foreground font-bold text-[15px] neon-glow flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {actionLoading === 'start' ? (
+                    <>Processing...</>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5" />
+                      {locale === 'ar' ? 'ابدأ' : 'Start'}
+                    </>
+                  )}
+                </motion.button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    disabled={actionLoading === 'reschedule'}
+                    onClick={() => handleAction('reschedule')}
+                    className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <Repeat className="w-4 h-4" />
+                    {locale === 'ar' ? 'إعادة جدولة' : 'Reschedule'}
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    disabled={actionLoading === 'skip'}
+                    onClick={() => handleAction('skip')}
+                    className="px-4 py-3 rounded-[14px] bg-muted/30 hover:bg-muted/50 text-foreground font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <SkipForward className="w-4 h-4" />
+                    {locale === 'ar' ? 'تخطي' : 'Skip'}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+
+            {decision.recommendations && decision.recommendations.length > 0 && (
+              <motion.div variants={itemVariants} className="glass-card p-5 mb-6">
+                <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-accent" />
+                  {locale === 'ar' ? 'توصيات اليوم' : "Today's Insights"}
+                </h3>
+                <div className="space-y-2">
+                  {decision.recommendations.map((rec, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-[13px] text-muted-foreground">
+                      <ChevronRight className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                      <span>{rec}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </>
         )}
 
         <motion.section variants={itemVariants} className="mb-8">
-          <h2 className="text-[18px] font-bold mb-4">{t('quickActions')}</h2>
-          <div className="grid grid-cols-3 gap-3">
-            <QuickActionCard href="/voice" icon={MessageSquare} label={t('voiceTaskLabel')} />
-            <QuickActionCard href="/calendar?action=new" icon={Calendar} label={t('newEventLabel')} />
-            <QuickActionCard href="/settings/integrations" icon={Mail} label={t('connectLabel')} />
+          <h3 className="text-[16px] font-bold mb-4 text-foreground">
+            {locale === 'ar' ? 'إجراءات سريعة' : 'Quick Actions'}
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/tasks">
+              <motion.div
+                whileTap={{ scale: 0.95 }}
+                className="glass-card-hover glass-card p-4 cursor-pointer text-center"
+              >
+                <span className="text-[13px] font-semibold text-foreground">
+                  {locale === 'ar' ? 'جميع المهام' : 'All Tasks'}
+                </span>
+              </motion.div>
+            </Link>
+            <Link href="/insights">
+              <motion.div
+                whileTap={{ scale: 0.95 }}
+                className="glass-card-hover glass-card p-4 cursor-pointer text-center"
+              >
+                <span className="text-[13px] font-semibold text-foreground">
+                  {locale === 'ar' ? 'رؤى' : 'Insights'}
+                </span>
+              </motion.div>
+            </Link>
           </div>
         </motion.section>
       </motion.div>
     </PageWrapper>
-  );
-}
-
-function InsightCard({ insight, locale, t }: { insight: Insight; locale: string; t: (key: string) => string }) {
-  const getIcon = () => {
-    switch (insight.category) {
-      case 'productivity': return TrendingUp;
-      case 'suggestion': return Lightbulb;
-      case 'achievement': return CheckCircle2;
-      default: return Brain;
-    }
-  };
-
-  const Icon = getIcon();
-
-  return (
-    <Link href="/insights">
-      <div className="glass-card-hover glass-card p-5 cursor-pointer">
-        <div className="flex items-start gap-4">
-          <div className={cn(
-            "w-11 h-11 rounded-[16px] flex items-center justify-center shrink-0",
-            insight.priority === 'high' || insight.priority === 'urgent' 
-              ? "bg-accent/20 neon-glow" 
-              : "bg-primary/20"
-          )}>
-            <Icon className={cn(
-              "w-6 h-6",
-              insight.priority === 'high' || insight.priority === 'urgent' ? "text-accent" : "text-primary"
-            )} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-[15px] font-semibold text-foreground line-clamp-1">{insight.title}</h3>
-              {insight.priority === 'high' && (
-                <Badge className="bg-accent/20 text-accent text-[11px] h-5 border-0">
-                  {t('high')}
-                </Badge>
-              )}
-            </div>
-            <p className="text-[13px] text-muted-foreground line-clamp-2 leading-relaxed">{insight.content}</p>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function FocusCard({ 
-  icon: Icon, 
-  title, 
-  value, 
-  color, 
-  href 
-}: { 
-  icon: React.ElementType; 
-  title: string; 
-  value: string; 
-  color: 'primary' | 'accent' | 'success' | 'gold';
-  href: string;
-}) {
-  const colorClasses = {
-    primary: 'bg-primary/20 text-primary',
-    accent: 'bg-accent/20 text-accent neon-glow',
-    success: 'bg-green-500/20 text-green-400',
-    gold: 'bg-[#F3C96B]/20 text-[#F3C96B]',
-  };
-
-  return (
-    <Link href={href}>
-      <motion.div whileTap={{ scale: 0.97 }}>
-        <div className="glass-card-hover glass-card p-5 cursor-pointer">
-          <div className={cn("w-12 h-12 rounded-[16px] flex items-center justify-center mb-4", colorClasses[color])}>
-            <Icon className="w-6 h-6" />
-          </div>
-          <p className="text-[13px] text-muted-foreground mb-2">{title}</p>
-          <p className="text-[24px] font-bold text-foreground">{value}</p>
-        </div>
-      </motion.div>
-    </Link>
-  );
-}
-
-function NotificationCard({ notification, locale }: { notification: NotificationPreview; locale: string }) {
-  const getPriorityColor = () => {
-    switch (notification.priority) {
-      case 'urgent': return 'text-red-500';
-      case 'high': return 'text-accent';
-      case 'normal': return 'text-primary';
-      default: return 'text-muted-foreground';
-    }
-  };
-
-  const priorityClass = notification.priority === 'urgent' ? 'priority-urgent' : 
-                        notification.priority === 'high' ? 'priority-high' : 'priority-normal';
-
-  return (
-    <Link href="/notifications">
-      <div className={cn(
-        "notification-card cursor-pointer transition-all hover:scale-[1.02]",
-        priorityClass,
-        !notification.is_read && "bg-accent/5"
-      )}>
-        <div className="flex items-start gap-3">
-          <div className={cn("mt-1", getPriorityColor())}>
-            <AlertCircle className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="text-[14px] font-semibold text-foreground line-clamp-1 mb-1">{notification.title}</h4>
-            <p className="text-[13px] text-muted-foreground line-clamp-2 leading-relaxed">{notification.message}</p>
-          </div>
-          {!notification.is_read && (
-            <div className="w-2.5 h-2.5 rounded-full bg-accent shrink-0 mt-2 neon-glow" />
-          )}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function QuickActionCard({ href, icon: Icon, label }: { href: string; icon: React.ElementType; label: string }) {
-  return (
-    <Link href={href}>
-      <motion.div
-        whileTap={{ scale: 0.95 }}
-        className="glass-card-hover glass-card flex flex-col items-center gap-3 p-5 cursor-pointer"
-      >
-        <div className="p-3 rounded-[16px] bg-accent/20 neon-glow">
-          <Icon className="w-6 h-6 text-accent" />
-        </div>
-        <span className="text-[12px] font-semibold text-center leading-tight text-foreground">{label}</span>
-      </motion.div>
-    </Link>
   );
 }

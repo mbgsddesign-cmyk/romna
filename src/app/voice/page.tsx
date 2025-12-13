@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
 export default function VoicePage() {
-  const { t, locale } = useTranslation();
+  const { locale } = useTranslation();
   const { user } = useAuth();
   const router = useRouter();
   const { } = useAppStore();
@@ -32,48 +32,6 @@ export default function VoicePage() {
       if (MediaRecorder.isTypeSupported(type)) return type;
     }
     return '';
-  };
-
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = getSupportedMimeType();
-      const options = mimeType ? { mimeType } : undefined;
-      const mediaRecorder = new MediaRecorder(stream, options);
-      
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      recordingMimeTypeRef.current = mediaRecorder.mimeType;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: recordingMimeTypeRef.current });
-        stream.getTracks().forEach((track) => track.stop());
-        if (audioBlob.size === 0) return;
-        await processAudio(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Mic Error:', err);
-      toast.error('Microphone access denied');
-    }
-  }, [processAudio]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, [isRecording]);
-
-  const toggleRecording = () => {
-    if (isRecording) stopRecording();
-    else startRecording();
   };
 
   const processAudio = useCallback(async (audioBlob: Blob) => {
@@ -133,6 +91,48 @@ export default function VoicePage() {
       setProcessingStatus('');
     }
   }, [locale, router, user]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = getSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+      recordingMimeTypeRef.current = mediaRecorder.mimeType;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(chunksRef.current, { type: recordingMimeTypeRef.current });
+        stream.getTracks().forEach((track) => track.stop());
+        if (audioBlob.size === 0) return;
+        await processAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Mic Error:', err);
+      toast.error('Microphone access denied');
+    }
+  }, [processAudio]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
+
+  const toggleRecording = () => {
+    if (isRecording) stopRecording();
+    else startRecording();
+  };
 
   return (
     <div className="relative h-screen w-full bg-void overflow-hidden flex flex-col items-center justify-center">

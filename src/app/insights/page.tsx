@@ -20,81 +20,24 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 
-interface Insight {
-  description?: string;
-  [key: string]: unknown;
+interface DayDecision {
+  active_task: {
+    title: string;
+    ai_reason: string;
+    ai_priority: number;
+  } | null;
+  active_task_reason: string;
+  recommendations: string[];
 }
 
 export default function InsightsPage() {
   const { locale } = useTranslation();
   const router = useRouter();
   const { user, profile } = useAuth();
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { decision, loading } = useAutoGLMDecision();
   const [buttonLoading, setButtonLoading] = useState<string | null>(null);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    loadingTimeoutRef.current = setTimeout(() => {
-      if (isMounted) {
-        console.warn('Insights loading timeout - showing UI anyway');
-        setLoading(false);
-      }
-    }, 8000);
-
-    const fetchInsights = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const res = await fetch('/api/insights/today', {
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) {
-          console.warn('Insights API returned non-OK status');
-          if (isMounted) setInsights([]);
-          return;
-        }
-        
-        const data = await res.json();
-        if (isMounted) {
-          if (data.success && data.insights) {
-            setInsights(data.insights);
-          } else {
-            setInsights([]);
-          }
-        }
-      } catch (error: unknown) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.warn('Insights request timed out');
-        } else {
-          console.error('Failed to fetch insights:', error);
-        }
-        if (isMounted) setInsights([]);
-      } finally {
-        if (isMounted) setLoading(false);
-        if (loadingTimeoutRef.current) {
-          clearTimeout(loadingTimeoutRef.current);
-        }
-      }
-    };
-
-    fetchInsights();
-
-    return () => {
-      isMounted = false;
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const handleAIAction = async (action: string, input: string) => {
     setButtonLoading(action);
@@ -113,7 +56,6 @@ export default function InsightsPage() {
       const data = await response.json();
       
       if (data.type === 'execute') {
-        // Show success toast (if you have toast installed)
         console.log('[Insights] Action executed:', data.message);
         setTimeout(() => window.location.reload(), 500);
       } else if (data.type === 'error') {
@@ -126,8 +68,11 @@ export default function InsightsPage() {
     }
   };
 
-  const latestInsight = insights[0];
-  const productivityScore = 66; // TODO: Calculate from real data
+  const insightMessage = decision?.active_task 
+    ? `Focus on "${decision.active_task.title}" - ${decision.active_task.ai_reason}`
+    : decision?.active_task_reason || "Your morning is light — schedule 45 minutes of deep focus before noon.";
+
+  const productivityScore = 66;
   const tasksCompleted = 6;
   const tasksTotal = 9;
   const focusTime = "1h 40m";
@@ -140,6 +85,22 @@ export default function InsightsPage() {
           <Skeleton className="h-4 w-full mb-8" />
           <Skeleton className="h-48 w-full mb-6" />
           <Skeleton className="h-32 w-full" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (!decision) {
+    return (
+      <PageWrapper className="px-5">
+        <div className="pt-8 text-center">
+          <Brain className="w-16 h-16 text-accent/30 mx-auto mb-4" />
+          <h2 className="text-[20px] font-bold text-foreground mb-2">
+            {locale === 'ar' ? 'لا توجد قرارات متاحة' : 'No decision available'}
+          </h2>
+          <p className="text-[14px] text-muted-foreground">
+            {locale === 'ar' ? 'أضف مهام للبدء' : 'Add tasks to get started'}
+          </p>
         </div>
       </PageWrapper>
     );
@@ -260,7 +221,7 @@ export default function InsightsPage() {
               <h3 className="font-bold text-foreground">AI Insight</h3>
             </div>
             <p className="text-base font-medium leading-relaxed text-muted-foreground">
-              {latestInsight?.description || "Your morning is light — schedule 45 minutes of deep focus before noon."}
+              {insightMessage}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button 

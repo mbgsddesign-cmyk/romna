@@ -7,60 +7,13 @@ import { Sparkles, Brain, Clock, ChevronRight, Calendar, Play, SkipForward, Repe
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
-
-interface ActiveTask {
-  id: string;
-  title: string;
-  state: 'active' | 'pending' | 'blocked' | 'done';
-  ai_priority: number;
-  ai_reason: string;
-  due_date?: string;
-  estimated_duration?: number;
-}
-
-interface DayDecision {
-  active_task: ActiveTask | null;
-  active_task_reason: string;
-  next_actions: string[];
-  recommendations: string[];
-}
+import { useState } from 'react';
+import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 
 export default function HomePage() {
   const { t, locale } = useTranslation();
-  const [decision, setDecision] = useState<DayDecision | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { decision, loading, refetch } = useAutoGLMDecision();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchDayDecision();
-  }, []);
-
-  const fetchDayDecision = async () => {
-    try {
-      const { supabase } = await import('@/lib/supabase');
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(`/api/autoglm/orchestrate?userId=${user.id}`, {
-        cache: 'no-store'
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setDecision(data.decision);
-      }
-    } catch (error) {
-      console.error('Failed to fetch day decision:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAction = async (action: 'start' | 'reschedule' | 'skip') => {
     setActionLoading(action);
@@ -81,7 +34,7 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        await fetchDayDecision();
+        await refetch();
       }
     } catch (error) {
       console.error('Action failed:', error);

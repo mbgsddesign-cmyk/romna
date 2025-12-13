@@ -1,0 +1,105 @@
+'use client';
+
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import { useAuth } from '@/lib/auth-context';
+
+interface ActiveTask {
+  id: string;
+  title: string;
+  state: 'active' | 'pending' | 'blocked' | 'done';
+  ai_priority: number;
+  ai_reason: string;
+  due_date?: string;
+  estimated_duration?: number;
+}
+
+export interface DayDecision {
+  decision_id?: string;
+  decision_type?: string;
+  explanation?: string;
+  primary_action?: string;
+  secondary_actions?: string[];
+  active_task: ActiveTask | null;
+  active_task_reason: string;
+  next_actions: string[];
+  recommendations: string[];
+}
+
+interface AutoGLMDecisionContextValue {
+  decision: DayDecision | null;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+const AutoGLMDecisionContext = createContext<AutoGLMDecisionContextValue | undefined>(undefined);
+
+export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const [decision, setDecision] = useState<DayDecision | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDecision = useCallback(async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/autoglm/orchestrate?userId=${user.id}`, {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.decision) {
+        setDecision(data.decision);
+      } else {
+        setDecision(null);
+      }
+    } catch (err: any) {
+      console.error('[AutoGLM Decision] Fetch error:', err);
+      setError(err.message || 'Failed to fetch decision');
+      setDecision(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchDecision();
+  }, [fetchDecision]);
+
+  const refetch = useCallback(async () => {
+    await fetchDecision();
+  }, [fetchDecision]);
+
+  return (
+    <AutoGLMDecisionContext.Provider
+      value={{
+        decision,
+        loading,
+        error,
+        refetch,
+      }}
+    >
+      {children}
+    </AutoGLMDecisionContext.Provider>
+  );
+}
+
+export function useAutoGLMDecision() {
+  const context = useContext(AutoGLMDecisionContext);
+  if (!context) {
+    throw new Error('useAutoGLMDecision must be used within AutoGLMDecisionProvider');
+  }
+  return context;
+}

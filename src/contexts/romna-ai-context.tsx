@@ -14,7 +14,7 @@ export interface AIResponse {
 }
 
 interface RomnaAIContextValue {
-  askRomna: (text: string) => Promise<AIResponse>;
+  askRomna: (text: string, onExecuteSuccess?: () => Promise<void>) => Promise<AIResponse>;
   isLoading: boolean;
   lastResponse?: AIResponse;
   isDrawerOpen: boolean;
@@ -30,7 +30,7 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
   const [lastResponse, setLastResponse] = useState<AIResponse | undefined>();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const askRomna = useCallback(async (text: string): Promise<AIResponse> => {
+  const askRomna = useCallback(async (text: string, onExecuteSuccess?: () => Promise<void>): Promise<AIResponse> => {
     console.log('[Ask ROMNA] Request:', text);
     setIsLoading(true);
 
@@ -63,8 +63,14 @@ export function RomnaAIProvider({ children }: { children: ReactNode }) {
       };
 
       setLastResponse(aiResponse);
-      console.log('[Ask ROMNA] AI response:', aiResponse.message);
+      console.log('[Ask ROMNA] AI response:', aiResponse.message, 'type:', aiResponse.type);
       
+      // If execution succeeded, trigger refetch callback
+      if (aiResponse.type === 'execute' && onExecuteSuccess) {
+        console.log('[Ask ROMNA] Execution success - triggering refetch');
+        await onExecuteSuccess();
+      }
+
       return aiResponse;
     } catch (error) {
       console.error('[Ask ROMNA] Error:', error);

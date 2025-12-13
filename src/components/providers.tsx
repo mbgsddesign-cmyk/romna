@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { AuthProvider } from '@/lib/auth-context';
 import { RomnaAIProvider } from '@/contexts/romna-ai-context';
+import { AutoGLMDecisionProvider } from '@/contexts/autoglm-decision-context';
 import { ProtectedRoute } from './protected-route';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -31,11 +32,13 @@ export function Providers({ children }: { children: ReactNode }) {
       storageKey="romna-theme"
     >
       <AuthProvider>
-        <RomnaAIProvider>
-          <ProtectedRoute>
-            {children}
-          </ProtectedRoute>
-        </RomnaAIProvider>
+        <AutoGLMDecisionProvider>
+          <RomnaAIProvider>
+            <ProtectedRoute>
+              {children}
+            </ProtectedRoute>
+          </RomnaAIProvider>
+        </AutoGLMDecisionProvider>
       </AuthProvider>
     </ThemeProvider>
   );

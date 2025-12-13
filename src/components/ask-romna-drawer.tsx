@@ -1,6 +1,7 @@
 'use client';
 
 import { useRomnaAI } from '@/contexts/romna-ai-context';
+import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
@@ -9,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 export function AskRomnaDrawer() {
   const { isDrawerOpen, closeDrawer, askRomna, isLoading, lastResponse } = useRomnaAI();
+  const { refetch } = useAutoGLMDecision();
   const { locale } = useTranslation();
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
@@ -34,7 +36,7 @@ export function AskRomnaDrawer() {
     setInput('');
     setResponse('');
     
-    await askRomna(question);
+    await askRomna(question, refetch);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

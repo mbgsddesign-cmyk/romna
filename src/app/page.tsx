@@ -172,7 +172,7 @@ export default function HomePage() {
             </h3>
             <div className="space-y-2">
               {calendarEvents.slice(0, 2).map((task) => {
-                const isRelated = task.id === activeTask?.id;
+                const isRelated = task.id === activeTask?.id || (activeTask?.title && task.title.toLowerCase().includes(activeTask.title.toLowerCase()));
                 return (
                   <div
                     key={task.id}

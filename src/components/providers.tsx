@@ -4,6 +4,7 @@ import { ThemeProvider } from 'next-themes';
 import { ReactNode, useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { AuthProvider } from '@/lib/auth-context';
+import { RomnaAIProvider } from '@/contexts/romna-ai-context';
 import { ProtectedRoute } from './protected-route';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -30,9 +31,11 @@ export function Providers({ children }: { children: ReactNode }) {
       storageKey="romna-theme"
     >
       <AuthProvider>
-        <ProtectedRoute>
-          {children}
-        </ProtectedRoute>
+        <RomnaAIProvider>
+          <ProtectedRoute>
+            {children}
+          </ProtectedRoute>
+        </RomnaAIProvider>
       </AuthProvider>
     </ThemeProvider>
   );

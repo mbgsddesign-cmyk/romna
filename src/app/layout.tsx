@@ -3,6 +3,8 @@ import "./globals.css";
 import { VisualEditsMessenger } from "orchids-visual-edits";
 import { Providers } from "@/components/providers";
 import { BottomNav } from "@/components/bottom-nav";
+import { AskRomnaButton } from "@/components/ask-romna-button";
+import { AskRomnaDrawer } from "@/components/ask-romna-drawer";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
@@ -45,6 +47,8 @@ export default function RootLayout({
             {children}
           </main>
           <BottomNav />
+          <AskRomnaButton />
+          <AskRomnaDrawer />
           <Toaster 
             position="top-center" 
             richColors 

@@ -59,8 +59,7 @@ export default function SettingsPage() {
   const fetchAIOptInStatus = async () => {
     if (!user?.id) return;
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
+      const { supabase } = await import('@/lib/supabase');
       const { data } = await supabase
         .from('user_preferences')
         .select('ai_opt_in')
@@ -79,8 +78,7 @@ export default function SettingsPage() {
     if (!user?.id) return;
     setUpdatingOptIn(true);
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
+      const { supabase } = await import('@/lib/supabase');
       
       const { error } = await supabase
         .from('user_preferences')

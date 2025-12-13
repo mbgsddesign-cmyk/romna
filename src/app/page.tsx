@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
+import { HomeSkeleton } from '@/components/skeletons/home-skeleton';
 
 interface Insight {
   id: string;
@@ -71,8 +72,7 @@ export default function HomePage() {
   const fetchData = async () => {
     try {
       // Get user from Supabase auth
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
+      const { supabase } = await import('@/lib/supabase');
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -112,8 +112,7 @@ export default function HomePage() {
 
   const handleSuggestionAction = async (suggestionId: string, action: 'accept' | 'reject') => {
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
+      const { supabase } = await import('@/lib/supabase');
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) return;
@@ -205,14 +204,7 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="glass-card p-5 animate-pulse">
-                  <div className="h-4 bg-muted/30 rounded w-3/4 mb-3" />
-                  <div className="h-3 bg-muted/20 rounded w-full" />
-                </div>
-              ))}
-            </div>
+            <HomeSkeleton />
           ) : insights.length > 0 ? (
             <div className="space-y-3">
               {insights.map((insight) => (
@@ -229,31 +221,61 @@ export default function HomePage() {
           )}
         </motion.section>
 
-        {todayPlan.length > 0 && (
-          <motion.section variants={itemVariants} className="mb-6">
-            <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-accent" />
-              Today's Plan
-            </h2>
+        {/* Today's Plan from AutoGLM */}
+        <motion.section variants={itemVariants} className="mb-6">
+          <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-accent" />
+            {locale === 'ar' ? 'خطة اليوم' : "Today's Plan"}
+          </h2>
+          {todayPlan.length > 0 ? (
             <div className="space-y-3">
               {todayPlan.map((block, idx) => (
-                <div key={idx} className="glass-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 rounded-[14px] bg-accent/20 flex items-center justify-center neon-glow">
-                        <span className="text-[18px] font-bold text-accent">{block.time}</span>
+                <div key={idx} className="glass-card p-4 hover:bg-muted/5 transition-colors">
+                  <div className="flex items-start gap-4">
+                    <div className="w-20 h-20 rounded-[16px] bg-gradient-to-br from-accent/20 to-accent/5 flex flex-col items-center justify-center neon-glow shrink-0">
+                      <span className="text-[20px] font-bold text-accent">{block.time}</span>
+                      <span className="text-[10px] text-accent/70 font-medium">{block.duration}m</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={cn(
+                          "text-[10px] h-5 border-0",
+                          block.type === 'focus' && "bg-purple-500/20 text-purple-400",
+                          block.type === 'event' && "bg-blue-500/20 text-blue-400",
+                          block.type === 'break' && "bg-green-500/20 text-green-400"
+                        )}>
+                          {block.type}
+                        </Badge>
                       </div>
-                      <div>
-                        <p className="text-[14px] font-semibold text-foreground">{block.reason}</p>
-                        <p className="text-[12px] text-muted-foreground">{block.duration} minutes · {block.type}</p>
-                      </div>
+                      <p className="text-[15px] font-semibold text-foreground leading-tight mb-2">
+                        {block.reason}
+                      </p>
+                      {block.task_ids && block.task_ids.length > 0 && (
+                        <p className="text-[12px] text-muted-foreground">
+                          {block.task_ids.length} {locale === 'ar' ? 'مهمة' : 'task(s)'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          </motion.section>
-        )}
+          ) : (
+            <div className="glass-card p-8 text-center">
+              <Clock className="w-12 h-12 text-accent/30 mx-auto mb-3" />
+              <p className="text-[14px] text-muted-foreground mb-4">
+                {locale === 'ar' 
+                  ? 'لا توجد خطة لليوم بعد'
+                  : 'No plan generated yet'}
+              </p>
+              <p className="text-[12px] text-muted-foreground">
+                {locale === 'ar'
+                  ? 'قم بتشغيل AutoGLM في الإعدادات للحصول على خطط يومية ذكية'
+                  : 'Enable AutoGLM in Settings to get smart daily plans'}
+              </p>
+            </div>
+          )}
+        </motion.section>
 
         {suggestions.length > 0 && (
           <motion.section variants={itemVariants} className="mb-6">

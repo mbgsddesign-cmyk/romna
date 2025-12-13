@@ -77,6 +77,7 @@ export function BottomNav() {
           <Drawer.Portal>
             <Drawer.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" />
             <Drawer.Content className="bg-obsidian border-t border-white/10 flex flex-col rounded-t-[32px] mt-24 fixed bottom-0 left-0 right-0 z-50 max-h-[85vh]">
+              <Drawer.Title className="sr-only">Account Menu</Drawer.Title>
               <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-white/20 mt-4 mb-8" />
               
               <div className="p-8 pt-0 flex flex-col gap-6">

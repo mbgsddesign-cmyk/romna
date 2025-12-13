@@ -198,7 +198,7 @@ export default function VoicePage() {
                  className="mt-32"
                >
                  <p className="text-white/30 text-xs font-space tracking-[0.2em] uppercase">
-                   {locale === 'ar' ? 'قل ما تريد مني التعامل معه' : 'Say what you want me to handle.'}
+                   {locale === 'ar' ? 'يمكنك أن تطلب مني التذكير أو الإرسال أو الجدولة' : 'You can ask me to remind, send, or schedule.'}
                  </p>
                </motion.div>
             )}

@@ -66,11 +66,11 @@ export default function HomePage() {
 
   // Zen Mode Logic: If no active task, show "Focus" prompt
   const displayTask = hasActiveTask ? activeTask : {
-    title: "Ready to Focus?",
-    description: "Tap the voice button to start your session.",
+    title: "System Idle",
+    description: "Listening for commands.",
     state: "Idle",
     ai_priority: 0,
-    ai_reason: "Awaiting your command."
+    ai_reason: "Nothing requires action. I'm listening."
   };
 
   const calendarEvents = [...todayTasks.slice(0, 2), ...tomorrowTasks.slice(0, 2)];
@@ -123,9 +123,6 @@ export default function HomePage() {
                      exit={{ opacity: 0, y: 20 }}
                      className="w-full flex flex-col gap-2"
                    >
-                     <p className="text-center text-xs text-white/40 font-space tracking-widest uppercase mb-1">
-                       When you&apos;re ready.
-                     </p>
                      <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.15)]">
                         <span className="relative z-10 flex items-center justify-center gap-3">
                           <span className="material-symbols-outlined text-[28px]">play_circle</span>
@@ -133,6 +130,9 @@ export default function HomePage() {
                         </span>
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[24px]"></div>
                      </button>
+                     <p className="text-center text-[10px] text-white/30 font-space tracking-widest uppercase mt-2">
+                       This will perform the action now
+                     </p>
                    </motion.div>
                  )}
                </AnimatePresence>

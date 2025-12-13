@@ -110,9 +110,11 @@ export default function NotificationsPage() {
            <div className="mt-32 flex flex-col items-center text-center opacity-40">
               <div className="w-16 h-1 bg-white/10 rounded-full mb-4"></div>
               <p className="text-white/50 font-space text-lg">
-                {locale === 'ar' ? 'لا شيء يحتاجك الآن.' : 'All quiet now.'}
+                {locale === 'ar' ? 'لا توجد إجراءات معلقة.' : 'No actions waiting.'}
               </p>
-              <p className="text-white/20 text-xs mt-2">Nothing requires your attention.</p>
+              <p className="text-white/20 text-xs mt-2">
+                {locale === 'ar' ? 'أنت جاهز.' : 'You’re clear.'}
+              </p>
            </div>
         ) : (
            <div className="w-full max-w-md space-y-4 mt-4">

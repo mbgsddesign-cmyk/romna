@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 interface ActiveTask {
@@ -41,11 +41,15 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
+  const hasFetchedRef = useRef(false);
+  
+  const userId = useMemo(() => user?.id, [user?.id]);
 
   const fetchDecision = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       setLoading(false);
       setStatus('empty');
+      hasFetchedRef.current = true;
       return;
     }
 
@@ -57,7 +61,7 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`/api/autoglm/orchestrate?userId=${user.id}`, {
+      const response = await fetch(`/api/autoglm/orchestrate?userId=${userId}`, {
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -89,14 +93,18 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
       setStatus('error');
     } finally {
       setLoading(false);
+      hasFetchedRef.current = true;
     }
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => {
-    fetchDecision();
-  }, [fetchDecision]);
+    if (!hasFetchedRef.current && userId) {
+      fetchDecision();
+    }
+  }, [fetchDecision, userId]);
 
   const refetch = useCallback(async () => {
+    hasFetchedRef.current = false;
     await fetchDecision();
   }, [fetchDecision]);
 

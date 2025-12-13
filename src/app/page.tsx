@@ -28,10 +28,29 @@ interface NotificationPreview {
   created_at: string;
 }
 
+interface AutoGLMSuggestion {
+  id: string;
+  suggestion_type: string;
+  payload: any;
+  explanation: string;
+  confidence: number;
+  priority: string;
+}
+
+interface TimelineBlock {
+  time: string;
+  duration: number;
+  task_ids: string[];
+  type: 'focus' | 'event' | 'break';
+  reason: string;
+}
+
 export default function HomePage() {
   const { t, locale } = useTranslation();
   const [insights, setInsights] = useState<Insight[]>([]);
   const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
+  const [suggestions, setSuggestions] = useState<AutoGLMSuggestion[]>([]);
+  const [todayPlan, setTodayPlan] = useState<TimelineBlock[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,9 +70,21 @@ export default function HomePage() {
 
   const fetchData = async () => {
     try {
-      const [insightsRes, notificationsRes] = await Promise.allSettled([
+      // Get user from Supabase auth
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const [insightsRes, notificationsRes, suggestionsRes, planRes] = await Promise.allSettled([
         fetch('/api/insights/today', { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/notifications/all?limit=3', { cache: 'no-store' }).then(r => r.json()),
+        fetch(`/api/autoglm/suggestions?userId=${user.id}`, { cache: 'no-store' }).then(r => r.json()),
+        fetch(`/api/autoglm/run?userId=${user.id}`, { cache: 'no-store' }).then(r => r.json()),
       ]);
 
       if (insightsRes.status === 'fulfilled' && insightsRes.value.success) {
@@ -63,10 +94,45 @@ export default function HomePage() {
       if (notificationsRes.status === 'fulfilled' && notificationsRes.value.success) {
         setNotifications(notificationsRes.value.notifications?.slice(0, 3) || []);
       }
+
+      if (suggestionsRes.status === 'fulfilled' && suggestionsRes.value.success) {
+        setSuggestions(suggestionsRes.value.suggestions?.slice(0, 3) || []);
+      }
+
+      if (planRes.status === 'fulfilled' && planRes.value.success && planRes.value.run) {
+        const planData = JSON.parse(planRes.value.run.context_snapshot?.daily_plan || '{}');
+        setTodayPlan(planData.timeline_blocks || []);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSuggestionAction = async (suggestionId: string, action: 'accept' | 'reject') => {
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const response = await fetch('/api/autoglm/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suggestion_id: suggestionId,
+          action,
+          user_id: user.id,
+        }),
+      });
+
+      if (response.ok) {
+        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+      }
+    } catch (error) {
+      console.error('Failed to handle suggestion:', error);
     }
   };
 
@@ -163,41 +229,78 @@ export default function HomePage() {
           )}
         </motion.section>
 
-        <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[18px] font-bold mb-4">
-            {t('focusProductivity')}
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <FocusCard
-              icon={Target}
-              title={t('todaysTasksLabel')}
-              value="3"
-              color="primary"
-              href="/tasks"
-            />
-            <FocusCard
-              icon={Calendar}
-              title={t('todaysEventsLabel')}
-              value="2"
-              color="accent"
-              href="/calendar"
-            />
-            <FocusCard
-              icon={TrendingUp}
-              title={t('completionRate')}
-              value="87%"
-              color="success"
-              href="/insights"
-            />
-            <FocusCard
-              icon={Zap}
-              title={t('activityScore')}
-              value="94"
-              color="gold"
-              href="/insights"
-            />
-          </div>
-        </motion.section>
+        {todayPlan.length > 0 && (
+          <motion.section variants={itemVariants} className="mb-6">
+            <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-accent" />
+              Today's Plan
+            </h2>
+            <div className="space-y-3">
+              {todayPlan.map((block, idx) => (
+                <div key={idx} className="glass-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-[14px] bg-accent/20 flex items-center justify-center neon-glow">
+                        <span className="text-[18px] font-bold text-accent">{block.time}</span>
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-semibold text-foreground">{block.reason}</p>
+                        <p className="text-[12px] text-muted-foreground">{block.duration} minutes · {block.type}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
+        {suggestions.length > 0 && (
+          <motion.section variants={itemVariants} className="mb-6">
+            <h2 className="text-[18px] font-bold mb-4 flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-accent" />
+              AI Suggestions
+            </h2>
+            <div className="space-y-3">
+              {suggestions.map((suggestion) => (
+                <div key={suggestion.id} className="glass-card p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-[14px] bg-accent/20 flex items-center justify-center shrink-0 neon-glow">
+                      <Sparkles className="w-5 h-5 text-accent" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-foreground mb-2">
+                        {suggestion.explanation}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-accent/20 text-accent text-[11px] h-5 border-0">
+                          {Math.round(suggestion.confidence * 100)}% confident
+                        </Badge>
+                        <Badge className="bg-primary/20 text-primary text-[11px] h-5 border-0">
+                          {suggestion.suggestion_type}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSuggestionAction(suggestion.id, 'accept')}
+                      className="flex-1 px-4 py-2 rounded-[12px] bg-accent/20 hover:bg-accent/30 text-accent font-semibold text-[14px] transition-all neon-glow"
+                    >
+                      ✓ Approve
+                    </button>
+                    <button
+                      onClick={() => handleSuggestionAction(suggestion.id, 'reject')}
+                      className="flex-1 px-4 py-2 rounded-[12px] bg-muted/20 hover:bg-muted/30 text-muted-foreground font-semibold text-[14px] transition-all"
+                    >
+                      × Ignore
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
 
         {notifications.length > 0 && (
           <motion.section variants={itemVariants} className="mb-6">

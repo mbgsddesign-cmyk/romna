@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { RomnaInput } from '@/components/romna';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -47,10 +48,61 @@ export default function SettingsPage() {
   const [isAddEmailOpen, setIsAddEmailOpen] = useState(false);
   const [newEmail, setNewEmail] = useState({ email: '', displayName: '' });
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [aiOptIn, setAiOptIn] = useState(false);
+  const [updatingOptIn, setUpdatingOptIn] = useState(false);
 
   useEffect(() => {
     refreshProfile();
+    fetchAIOptInStatus();
   }, [refreshProfile]);
+
+  const fetchAIOptInStatus = async () => {
+    if (!user?.id) return;
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('user_preferences')
+        .select('ai_opt_in')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (data) {
+        setAiOptIn(data.ai_opt_in ?? false);
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI opt-in status:', error);
+    }
+  };
+
+  const handleAIOptInToggle = async (checked: boolean) => {
+    if (!user?.id) return;
+    setUpdatingOptIn(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          ai_opt_in: checked,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        });
+
+      if (error) throw error;
+
+      setAiOptIn(checked);
+      toast.success(checked ? 'AutoGLM enabled' : 'AutoGLM disabled');
+    } catch (error) {
+      console.error('Failed to update AI opt-in:', error);
+      toast.error('Failed to update settings');
+    } finally {
+      setUpdatingOptIn(false);
+    }
+  };
 
   const connectedCount = profile?.integrations?.filter(i => i.is_connected).length || integrations.filter(i => i.isConnected).length;
 
@@ -267,6 +319,39 @@ export default function SettingsPage() {
                 </Select>
               }
             />
+          </div>
+        </motion.section>
+
+        <motion.section variants={itemVariants} className="mb-6">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">AutoGLM</h2>
+          <div className="glass-card p-0 overflow-hidden">
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4 flex-1 mr-4">
+                <div className="w-12 h-12 rounded-[16px] bg-accent/20 flex items-center justify-center neon-glow">
+                  <Sparkles className="w-6 h-6 text-accent" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-semibold text-foreground mb-1">Enable AutoGLM</h3>
+                  <p className="text-[13px] text-muted-foreground leading-relaxed">
+                    Let AI generate daily plans, suggest actions, and provide intelligent recommendations.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={aiOptIn}
+                onCheckedChange={handleAIOptInToggle}
+                disabled={updatingOptIn}
+              />
+            </div>
+            <div className="px-5 pb-5 pt-0">
+              <div className="rounded-[14px] bg-muted/30 p-4">
+                <p className="text-[12px] text-muted-foreground leading-relaxed">
+                  <strong className="text-foreground">Privacy First:</strong> AutoGLM runs in the background to help organize your day. 
+                  All suggestions require your approval before any action is taken. 
+                  You can disable this anytime. No data is shared with third parties.
+                </p>
+              </div>
+            </div>
           </div>
         </motion.section>
 

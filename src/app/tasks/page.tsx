@@ -4,7 +4,7 @@ import { PageWrapper } from '@/components/page-wrapper';
 import { useTranslation } from '@/hooks/use-translation';
 import { useAppStore, Task, Priority } from '@/lib/store';
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from 'framer-motion';
-import { Plus, Check, Trash2, CheckSquare, Filter, X } from 'lucide-react';
+import { Plus, Check, Trash2, CheckSquare, Filter, X, ChevronDown } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { format, isToday, isFuture, parseISO } from 'date-fns';
@@ -23,11 +23,13 @@ function TasksContent() {
   const { t, locale } = useTranslation();
   const searchParams = useSearchParams();
   const { tasks: zustandTasks, addTask, toggleTaskStatus, deleteTask } = useAppStore();
-  const [serverTasks, setServerTasks] = useState<any[]>([]);
+  const [dailyPlan, setDailyPlan] = useState<any>(null);
+  const [aiInsight, setAiInsight] = useState<string>('');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', dueDate: '', priority: 'medium' as Priority });
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [loading, setLoading] = useState(true);
+  const [showLater, setShowLater] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
@@ -36,62 +38,51 @@ function TasksContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    // Fetch server tasks with AI state
-    const fetchServerTasks = async () => {
+    const fetchDailyPlan = async () => {
       try {
-        // TODO: Get actual userId from auth
         const userId = '3a4bf508-5423-4f8c-87eb-8d9f63e20893';
-        const res = await fetch(`/api/tasks?userId=${userId}`, { next: { revalidate: 30 } });
-        const data = await res.json();
-        if (data.success) {
-          setServerTasks(data.tasks || []);
+        const today = new Date().toISOString().split('T')[0];
+        
+        const planRes = await fetch(
+          `/api/autoglm/plan?userId=${userId}&date=${today}`,
+          { cache: 'no-store' }
+        );
+        const planData = await planRes.json();
+        
+        if (planData.success) {
+          setDailyPlan(planData.plan);
+          
+          const summaryRes = await fetch('/api/autoglm/summary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan_json: planData.plan }),
+            cache: 'no-store',
+          });
+          const summaryData = await summaryRes.json();
+          if (summaryData.success) {
+            setAiInsight(summaryData.insight);
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch server tasks:', error);
+        console.error('Failed to fetch daily plan:', error);
       } finally {
         setLoading(false);
       }
     };
-    fetchServerTasks();
+    fetchDailyPlan();
   }, []);
 
-  // Merge Zustand tasks with server tasks, applying AI filtering
-  const allTasks = [...zustandTasks, ...serverTasks.map(st => ({
-    id: st.id,
-    title: st.title,
-    description: st.description,
-    dueDate: st.due_date,
-    priority: st.priority as Priority,
-    status: st.status as 'pending' | 'done',
-    createdAt: st.created_at,
-    source: st.source,
-    intent_type: st.intent_type,
-    confidence: st.confidence,
-    transcript: st.transcript,
-    ai_state: st.ai_state,
-    smart_action: st.smart_action
-  }))];
-
-  const filterTasks = (taskList: Task[]) => {
+  const filterTasks = (taskList: any[]) => {
     if (priorityFilter === 'all') return taskList;
     return taskList.filter(task => task.priority === priorityFilter);
   };
 
-  // Apply AI-driven time & context filtering
-  const contextFilteredTasks = allTasks.filter(task => 
-    task.status !== 'done' && shouldShowTaskNow(task)
-  );
-
-  const todayTasks = filterTasks(
-    contextFilteredTasks.filter((task) => task.dueDate && isToday(parseISO(task.dueDate)))
-  );
-
-  const upcomingTasks = filterTasks(
-    contextFilteredTasks.filter((task) => task.dueDate && isFuture(parseISO(task.dueDate)) && !isToday(parseISO(task.dueDate)))
-  );
+  const topNowTasks = filterTasks(dailyPlan?.top_now || []);
+  const nextTasks = filterTasks(dailyPlan?.next || []);
+  const laterTasks = filterTasks(dailyPlan?.later || []);
 
   const completedTasks = filterTasks(
-    allTasks.filter((task) => task.status === 'done')
+    zustandTasks.filter((task) => task.status === 'done')
   );
 
   const handleAddTask = () => {
@@ -160,29 +151,63 @@ function TasksContent() {
           </motion.div>
         )}
 
-        <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title={t('today')} />
-          {todayTasks.length > 0 ? (
-            <SwipeableTaskList tasks={todayTasks} onToggle={toggleTaskStatus} onDelete={deleteTask} />
-          ) : (
-            <EmptyState message={t('noTasks')} icon={CheckSquare} />
-          )}
-        </motion.section>
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-20 bg-muted/20 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <>
+            {aiInsight && (
+              <motion.div variants={itemVariants} className="mb-6 p-4 rounded-xl bg-accent/10 border border-accent/20">
+                <p className="text-sm text-foreground font-medium">{aiInsight}</p>
+              </motion.div>
+            )}
 
-        <motion.section variants={itemVariants} className="mb-6">
-          <SectionHeader title={t('upcoming')} />
-          {upcomingTasks.length > 0 ? (
-            <SwipeableTaskList tasks={upcomingTasks} onToggle={toggleTaskStatus} onDelete={deleteTask} showDate />
-          ) : (
-            <EmptyState message={t('noTasks')} icon={CheckSquare} />
-          )}
-        </motion.section>
+            <motion.section variants={itemVariants} className="mb-6">
+              <SectionHeader title="Now" />
+              {topNowTasks.length > 0 ? (
+                <SwipeableTaskList tasks={topNowTasks} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+              ) : (
+                <EmptyState message="No urgent tasks right now" icon={CheckSquare} />
+              )}
+            </motion.section>
 
-        {completedTasks.length > 0 && (
-          <motion.section variants={itemVariants} className="mb-6">
-            <SectionHeader title={t('done')} />
-            <SwipeableTaskList tasks={completedTasks.slice(0, 5)} onToggle={toggleTaskStatus} onDelete={deleteTask} />
-          </motion.section>
+            <motion.section variants={itemVariants} className="mb-6">
+              <SectionHeader title="Next" />
+              {nextTasks.length > 0 ? (
+                <SwipeableTaskList tasks={nextTasks} onToggle={toggleTaskStatus} onDelete={deleteTask} showDate />
+              ) : (
+                <EmptyState message="No upcoming tasks" icon={CheckSquare} />
+              )}
+            </motion.section>
+
+            {laterTasks.length > 0 && (
+              <motion.section variants={itemVariants} className="mb-6">
+                <div 
+                  onClick={() => setShowLater(!showLater)}
+                  className="flex items-center justify-between cursor-pointer mb-4"
+                >
+                  <h3 className="text-lg font-bold">Later ({laterTasks.length})</h3>
+                  <ChevronDown className={cn(
+                    "w-5 h-5 transition-transform",
+                    showLater && "rotate-180"
+                  )} />
+                </div>
+                {showLater && (
+                  <SwipeableTaskList tasks={laterTasks} onToggle={toggleTaskStatus} onDelete={deleteTask} showDate />
+                )}
+              </motion.section>
+            )}
+
+            {completedTasks.length > 0 && (
+              <motion.section variants={itemVariants} className="mb-6">
+                <SectionHeader title={t('done')} />
+                <SwipeableTaskList tasks={completedTasks.slice(0, 5)} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+              </motion.section>
+            )}
+          </>
         )}
       </motion.div>
 

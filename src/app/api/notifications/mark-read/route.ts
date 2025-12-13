@@ -1,17 +1,18 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { notificationId, userId } = await req.json();
 
-    const { notificationId } = await req.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'userId required' }, { status: 400 });
+    }
 
     const { error } = await supabase
       .from('notifications')
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
         read_at: new Date().toISOString()
       })
       .eq('id', notificationId)
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (error) throw error;
 

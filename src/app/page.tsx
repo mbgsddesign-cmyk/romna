@@ -52,8 +52,8 @@ export default function HomePage() {
   const fetchData = async () => {
     try {
       const [insightsRes, notificationsRes] = await Promise.allSettled([
-        fetch('/api/insights/today', { next: { revalidate: 60 } }).then(r => r.json()),
-        fetch('/api/notifications/all?limit=3', { next: { revalidate: 30 } }).then(r => r.json()),
+        fetch('/api/insights/today', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/notifications/all?limit=3', { cache: 'no-store' }).then(r => r.json()),
       ]);
 
       if (insightsRes.status === 'fulfilled' && insightsRes.value.success) {

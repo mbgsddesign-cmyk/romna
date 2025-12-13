@@ -11,15 +11,21 @@ export const revalidate = 30; // Revalidate every 30 seconds
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId');
     const category = searchParams.get('category');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    // For server-side API routes, we use service role to bypass RLS
-    // Frontend should pass user context if needed, or we rely on auth cookie
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'userId is required' 
+      }, { status: 400 });
+    }
     
     let query = supabase
       .from('notifications')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
 

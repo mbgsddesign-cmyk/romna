@@ -60,13 +60,21 @@ export default function NotificationsPage() {
 
   const fetchNotifications = useCallback(async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn('No authenticated user found');
+        setNotifications([]);
+        setLoading(false);
+        return;
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
       
       const category = activeTab === 'all' ? null : activeTab;
       const url = category 
-        ? `/api/notifications/all?category=${category}`
-        : '/api/notifications/all';
+        ? `/api/notifications/all?userId=${user.id}&category=${category}`
+        : `/api/notifications/all?userId=${user.id}`;
       
       const res = await fetch(url, {
         signal: controller.signal,

@@ -4,9 +4,19 @@ import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
-import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import { format, isToday, isTomorrow, parseISO, addMinutes, addHours, addDays, startOfTomorrow } from 'date-fns';
 import { BottomNav } from '@/components/bottom-nav';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer";
+import { toast } from 'sonner'; // Assuming sonner is installed/used
 
 interface Task {
   id: string;
@@ -20,11 +30,13 @@ interface Task {
 }
 
 export default function HomePage() {
-  const { decision } = useAutoGLMDecision();
-  const { user } = useAuth();
+  const { decision, refetch } = useAutoGLMDecision();
+  const { user, session } = useAuth();
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [tomorrowTasks, setTomorrowTasks] = useState<Task[]>([]);
   const [showExecute, setShowExecute] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isSnoozing, setIsSnoozing] = useState(false);
 
   useEffect(() => {
     if (decision?.active_task) {
@@ -59,7 +71,7 @@ export default function HomePage() {
     };
 
     fetchTasks();
-  }, [user?.id]);
+  }, [user?.id, decision]);
 
   const activeTask = decision?.active_task;
   const hasActiveTask = !!activeTask;
@@ -71,6 +83,106 @@ export default function HomePage() {
     state: "Idle",
     ai_priority: 0,
     ai_reason: "Nothing requires action. I'm listening."
+  };
+
+  // Execution Handlers
+  const handleExecute = async () => {
+    if (!activeTask || isExecuting) return;
+    setIsExecuting(true);
+
+    try {
+      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
+
+      if (isTaskUUID) {
+        // Mark existing task as done
+        const { error } = await supabase
+          .from('tasks')
+          .update({ status: 'done' })
+          .eq('id', activeTask.id);
+        
+        if (error) throw error;
+      } else {
+        // Create execution plan for abstract directive
+        const res = await fetch('/api/actions/plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            intent: decision?.primary_action?.includes('reminder') ? 'reminder' : 'task',
+            payload: {
+              title: activeTask.title,
+              description: activeTask.ai_reason,
+            },
+            source: 'button',
+          }),
+        });
+
+        if (!res.ok) throw new Error('Execution planning failed');
+      }
+
+      // Optimistic / Immediate Update
+      setShowExecute(false);
+      await refetch();
+      
+    } catch (error) {
+      console.error('Execution failed:', error);
+      // Silent fail as per requirements
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleSnooze = async (minutes: number = 15) => {
+    if (!activeTask || isSnoozing) return;
+    setIsSnoozing(true);
+
+    try {
+      const newTime = addMinutes(new Date(), minutes).toISOString();
+      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
+
+      if (isTaskUUID) {
+        await supabase
+          .from('tasks')
+          .update({ due_date: newTime })
+          .eq('id', activeTask.id);
+      } else {
+        // For non-DB tasks, we can't easily snooze persistence without creating it first.
+        // Assuming primarily DB tasks for now as per prompt context of "System Surface".
+        // If it's a suggestion, we skip.
+      }
+      
+      await refetch();
+    } catch (error) {
+      console.error('Snooze failed:', error);
+    } finally {
+      setIsSnoozing(false);
+    }
+  };
+
+  const handleAdjust = async (newDate?: Date, newPriority?: number) => {
+    if (!activeTask) return;
+    
+    try {
+      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
+      if (isTaskUUID) {
+        const updates: any = {};
+        if (newDate) updates.due_date = newDate.toISOString();
+        if (newPriority !== undefined) updates.priority = newPriority > 50 ? 'high' : 'medium'; // Simplistic mapping
+
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from('tasks')
+            .update(updates)
+            .eq('id', activeTask.id);
+          
+          await refetch();
+        }
+      }
+    } catch (error) {
+      console.error('Adjust failed:', error);
+    }
   };
 
   // Mock Timeline Data (Real data would come from execution logs)
@@ -119,7 +231,7 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* 3. The Action: Massive Execute Slide-Button */}
+          {/* 3. The Action: Massive Execute Slide-Button + Controls */}
           <div className="p-4 bg-gradient-to-t from-black/80 to-transparent flex flex-col gap-3">
              {hasActiveTask ? (
                <AnimatePresence>
@@ -128,18 +240,92 @@ export default function HomePage() {
                      initial={{ opacity: 0, y: 20 }}
                      animate={{ opacity: 1, y: 0 }}
                      exit={{ opacity: 0, y: 20 }}
-                     className="w-full flex flex-col gap-2"
+                     className="w-full flex flex-col gap-3"
                    >
-                     <button className="relative w-full h-20 rounded-[24px] bg-volt text-black font-bold text-xl font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.15)]">
+                     {/* Primary Execute */}
+                     <button 
+                        onClick={handleExecute}
+                        disabled={isExecuting}
+                        className="relative w-full h-16 rounded-[20px] bg-volt text-black font-bold text-lg font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.15)] disabled:opacity-70 disabled:pointer-events-none"
+                     >
                         <span className="relative z-10 flex items-center justify-center gap-3">
-                          <span className="material-symbols-outlined text-[28px]">play_circle</span>
-                          EXECUTE
+                          {isExecuting ? (
+                            <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
+                          ) : (
+                            <span className="material-symbols-outlined text-[24px]">play_circle</span>
+                          )}
+                          {isExecuting ? 'EXECUTING...' : 'EXECUTE'}
                         </span>
-                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[24px]"></div>
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[20px]"></div>
                      </button>
-                     <p className="text-center text-[10px] text-white/30 font-space tracking-widest uppercase mt-2">
-                       This will perform the action now
-                     </p>
+                     
+                     {/* Secondary Controls: Snooze & Adjust */}
+                     <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          onClick={() => handleSnooze(15)}
+                          disabled={isSnoozing}
+                          className="h-12 rounded-[16px] bg-white/5 border border-white/10 text-white/70 font-space text-xs font-bold uppercase tracking-widest hover:bg-white/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                           <span className="material-symbols-outlined text-[16px]">snooze</span>
+                           +15m
+                        </button>
+                        
+                        <Drawer>
+                          <DrawerTrigger asChild>
+                            <button className="h-12 rounded-[16px] bg-white/5 border border-white/10 text-white/70 font-space text-xs font-bold uppercase tracking-widest hover:bg-white/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                               <span className="material-symbols-outlined text-[16px]">tune</span>
+                               Adjust
+                            </button>
+                          </DrawerTrigger>
+                          <DrawerContent className="bg-obsidian border-t border-white/10">
+                             <div className="p-6 pb-12">
+                                <DrawerHeader className="mb-6 p-0 text-left">
+                                   <DrawerTitle className="text-white font-space text-xl">Adjust Directive</DrawerTitle>
+                                </DrawerHeader>
+                                
+                                <div className="space-y-6">
+                                   {/* Quick Time Adjust */}
+                                   <div className="space-y-3">
+                                      <label className="text-xs text-white/40 font-bold uppercase tracking-widest">Reschedule</label>
+                                      <div className="grid grid-cols-3 gap-3">
+                                         <button onClick={() => handleSnooze(60)} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
+                                            +1 Hour
+                                         </button>
+                                         <button onClick={() => handleSnooze(180)} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
+                                            +3 Hours
+                                         </button>
+                                         <button onClick={() => handleAdjust(addHours(startOfTomorrow(), 9))} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
+                                            Tomorrow
+                                         </button>
+                                      </div>
+                                   </div>
+
+                                   {/* Priority Adjust */}
+                                   <div className="space-y-3">
+                                      <label className="text-xs text-white/40 font-bold uppercase tracking-widest">Priority</label>
+                                      <div className="grid grid-cols-2 gap-3">
+                                         <button onClick={() => handleAdjust(undefined, 100)} className={`p-3 rounded-xl border text-sm font-bold ${activeTask.ai_priority > 50 ? 'bg-volt text-black border-volt' : 'bg-white/5 border-white/10 text-white'}`}>
+                                            High Priority
+                                         </button>
+                                         <button onClick={() => handleAdjust(undefined, 10)} className={`p-3 rounded-xl border text-sm font-bold ${activeTask.ai_priority <= 50 ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-white'}`}>
+                                            Normal
+                                         </button>
+                                      </div>
+                                   </div>
+                                </div>
+
+                                <DrawerFooter className="mt-8 p-0">
+                                  <DrawerClose asChild>
+                                    <button className="w-full py-4 rounded-xl bg-white/5 text-white/60 font-space text-sm font-bold uppercase tracking-widest hover:text-white">
+                                      Close
+                                    </button>
+                                  </DrawerClose>
+                                </DrawerFooter>
+                             </div>
+                          </DrawerContent>
+                        </Drawer>
+                     </div>
+
                    </motion.div>
                  )}
                </AnimatePresence>

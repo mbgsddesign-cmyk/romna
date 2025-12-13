@@ -5,165 +5,173 @@ import { useTranslation } from '@/hooks/use-translation';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
-  Sparkles, 
-  AlertTriangle, 
-  ShoppingBasket, 
-  Calendar, 
-  CheckCircle2, 
-  Lightbulb, 
-  Mic,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Mail,
+  MessageSquare,
   Bell,
-  Brain
+  Calendar,
+  RefreshCw,
+  Edit
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { PaywallModal } from '@/components/romna/paywall-modal';
-import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 
-type NotificationType = 'all' | 'ai' | 'reminders';
-
-interface Notification {
+interface ExecutionPlan {
   id: string;
-  type: string;
-  title: string;
-  message: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  category: string;
+  user_id: string;
+  source: 'voice' | 'text';
+  intent_type: 'reminder' | 'alarm' | 'email' | 'whatsapp' | 'notification';
+  scheduled_for: string;
+  requires_approval: boolean;
+  status: 'pending' | 'waiting_approval' | 'scheduled' | 'executed' | 'cancelled' | 'failed';
+  payload: Record<string, any>;
   created_at: string;
-  action_url?: string;
-  action_label?: string;
-  is_read: boolean;
-  metadata?: Record<string, unknown>;
+  executed_at?: string;
+  error_message?: string;
 }
 
 export default function NotificationsPage() {
   const { t, locale } = useTranslation();
   const router = useRouter();
-  const { decision, status: decisionStatus } = useAutoGLMDecision();
-  const [activeTab, setActiveTab] = useState<NotificationType>('all');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [plans, setPlans] = useState<ExecutionPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Paywall state
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [paywallFeature, setPaywallFeature] = useState('Pro Feature');
-  const [paywallTrigger, setPaywallTrigger] = useState('notification_unlock');
-
-  const openPaywall = (feature: string, trigger: string) => {
-    setPaywallFeature(feature);
-    setPaywallTrigger(trigger);
-    setShowPaywall(true);
-  };
-
-  const fetchNotifications = useCallback(async () => {
+  const fetchPlans = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.warn('No authenticated user found');
-        setNotifications([]);
+        setPlans([]);
         setLoading(false);
         return;
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const category = activeTab === 'all' ? null : activeTab;
-      const url = category 
-        ? `/api/notifications/all?userId=${user.id}&category=${category}`
-        : `/api/notifications/all?userId=${user.id}`;
-      
-      const res = await fetch(url, {
-        signal: controller.signal,
+      const response = await fetch(`/api/execution/plans?userId=${user.id}`, {
         cache: 'no-store',
       });
-      
-      clearTimeout(timeoutId);
-      
-      if (!res.ok) {
-        console.warn('Notifications API returned non-OK status');
-        setNotifications([]);
+
+      if (!response.ok) {
+        setPlans([]);
         return;
       }
-      
-      const data = await res.json();
-      if (data.success && data.notifications) {
-        setNotifications(data.notifications);
+
+      const data = await response.json();
+      if (data.success && data.plans) {
+        setPlans(data.plans);
       } else {
-        setNotifications([]);
+        setPlans([]);
       }
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.warn('Notifications request timed out');
-      } else {
-        console.error('Failed to fetch notifications:', error);
-      }
-      setNotifications([]);
+    } catch (error) {
+      console.error('[Notifications] Failed to fetch execution plans:', error);
+      setPlans([]);
     } finally {
       setLoading(false);
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
     }
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
-    loadingTimeoutRef.current = setTimeout(() => {
-      if (loading) {
-        console.warn('Notifications loading timeout - showing UI anyway');
-        setLoading(false);
-      }
-    }, 8000);
+    fetchPlans();
 
-    fetchNotifications();
-    
     const channel = supabase
-      .channel('notifications')
+      .channel('execution_plans_changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications'
-        },
-        () => {
-          fetchNotifications();
-        }
+        { event: '*', schema: 'public', table: 'execution_plans' },
+        () => fetchPlans()
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
     };
-  }, [fetchNotifications, loading]);
+  }, [fetchPlans]);
 
-  const handleMarkRead = async (id: string) => {
+  const handleApprove = async (planId: string) => {
+    if (actionLoading) return;
+    setActionLoading(planId);
+
     try {
-      // Optimistic update
-      setNotifications(prev => 
-        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
-      );
-
-      await fetch('/api/notifications/mark-read', {
+      const response = await fetch('/api/actions/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId: id }),
+        body: JSON.stringify({ planId }),
       });
+
+      if (response.ok) {
+        await fetchPlans();
+      }
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      console.error('Approve failed:', error);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const newNotifications = notifications.filter(n => !n.is_read);
-  const earlierNotifications = notifications.filter(n => n.is_read);
+  const handleCancel = async (planId: string) => {
+    if (actionLoading) return;
+    setActionLoading(planId);
 
-  const hasActiveDecision = decision?.active_task != null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('execution_plans')
+        .update({ status: 'cancelled' })
+        .eq('id', planId)
+        .eq('user_id', user.id);
+
+      if (!error) {
+        await fetchPlans();
+      }
+    } catch (error) {
+      console.error('Cancel failed:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRetry = async (planId: string) => {
+    if (actionLoading) return;
+    setActionLoading(planId);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('execution_plans')
+        .update({ 
+          status: 'scheduled',
+          error_message: null,
+          scheduled_for: new Date().toISOString(),
+        })
+        .eq('id', planId)
+        .eq('user_id', user.id);
+
+      if (!error) {
+        await fetchPlans();
+      }
+    } catch (error) {
+      console.error('Retry failed:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filterPlans = (status: ExecutionPlan['status'][]) => 
+    plans.filter(p => status.includes(p.status));
+
+  const scheduledPlans = filterPlans(['scheduled']);
+  const waitingApproval = filterPlans(['waiting_approval']);
+  const failedPlans = filterPlans(['failed']);
+
+  const hasActions = scheduledPlans.length > 0 || waitingApproval.length > 0 || failedPlans.length > 0;
 
   return (
     <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-[#f6f8f7] dark:bg-[#112117] text-foreground font-sans">
@@ -175,129 +183,85 @@ export default function NotificationsPage() {
         >
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h2 className="text-white text-xl font-bold leading-tight tracking-tight">Notifications</h2>
-        <div className="size-10"></div> 
+        <h2 className="text-white text-xl font-bold leading-tight tracking-tight">
+          {locale === 'ar' ? 'صندوق التنفيذ' : 'Execution Inbox'}
+        </h2>
+        <button
+          onClick={fetchPlans}
+          className="text-white hover:text-[#30e87a] transition-colors flex size-10 items-center justify-center rounded-full active:bg-white/5"
+        >
+          <RefreshCw className="w-5 h-5" />
+        </button>
       </header>
 
-      {/* Segmented Control */}
-      <div className="px-6 py-2 shrink-0 z-20">
-        <div className="flex h-12 w-full items-center rounded-full bg-[#1A2C22] p-1.5 border border-white/5 relative">
-          {/* Animated Selection Background */}
-          <motion.div 
-            className="absolute top-1.5 bottom-1.5 bg-[#30e87a] rounded-full shadow-lg z-0"
-            layoutId="tab-highlight"
-            initial={false}
-            animate={{
-              left: activeTab === 'all' ? '1.5%' : activeTab === 'ai' ? '34%' : '67%',
-              width: '32%'
-            }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          />
-          
-          <button 
-            onClick={() => setActiveTab('all')}
-            className={cn(
-              "relative z-10 flex-1 flex items-center justify-center font-semibold text-sm h-full rounded-full transition-all duration-200",
-              activeTab === 'all' ? "text-[#052e16]" : "text-[#9db8a8] hover:text-white"
-            )}
-          >
-            All
-          </button>
-          <button 
-            onClick={() => setActiveTab('ai')}
-            className={cn(
-              "relative z-10 flex-1 flex items-center justify-center font-medium text-sm h-full rounded-full transition-all duration-200",
-              activeTab === 'ai' ? "text-[#052e16] font-semibold" : "text-[#9db8a8] hover:text-white"
-            )}
-          >
-            AI
-          </button>
-          <button 
-            onClick={() => setActiveTab('reminders')}
-            className={cn(
-              "relative z-10 flex-1 flex items-center justify-center font-medium text-sm h-full rounded-full transition-all duration-200",
-              activeTab === 'reminders' ? "text-[#052e16] font-semibold" : "text-[#9db8a8] hover:text-white"
-            )}
-          >
-            Reminders
-          </button>
-        </div>
-      </div>
-
-      {/* Decision Context Hint */}
-      <div className="px-6 py-4 shrink-0 text-center z-10">
-        {hasActiveDecision ? (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A2C22]/50 border border-white/5 backdrop-blur-sm">
-            <Sparkles className="w-4 h-4 text-[#30e87a]" />
-            <p className="text-[#9db8a8] text-xs font-medium tracking-wide">
-              {locale === 'ar' ? 'مرتبط بقرار اليوم' : 'Related to today\'s focus'}
-            </p>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-4 z-0">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-8 h-8 text-accent animate-spin" />
           </div>
-        ) : (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1A2C22]/50 border border-white/5 backdrop-blur-sm">
-            <Brain className="w-4 h-4 text-muted-foreground" />
-            <p className="text-[#9db8a8] text-xs font-medium tracking-wide">
-              {locale === 'ar' ? 'لا يوجد قرار نشط' : 'No active decision'}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Notification List */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pb-32 space-y-3 z-0">
-        
-        {!hasActiveDecision && notifications.length === 0 && !loading ? (
+        ) : !hasActions ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Brain className="w-16 h-16 text-muted-foreground/30 mb-4" />
+            <CheckCircle className="w-16 h-16 text-accent/30 mb-4" />
             <p className="text-white/60 text-sm">
               {locale === 'ar' 
-                ? 'الإشعارات تظهر عندما يوجد قرار نشط' 
-                : 'Notifications are informational only'}
+                ? 'لا توجد إجراءات قادمة أو موافقات مطلوبة.' 
+                : 'No upcoming actions or approvals.'}
             </p>
           </div>
         ) : (
           <>
-            {/* NEW SECTION */}
-            {newNotifications.length > 0 && (
+            {/* Waiting Approval */}
+            {waitingApproval.length > 0 && (
               <>
-                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-2">New</h3>
-                
-                {newNotifications.map(n => (
-                  <NotificationItem 
-                    key={n.id}
-                    title={n.title}
-                    message={n.message}
-                    time={getTimeAgo(n.created_at)}
-                    icon={getIconForCategory(n.category, n.priority)}
-                    isUnread={true}
-                    onClick={() => handleMarkRead(n.id)}
-                    category={n.category}
-                    metadata={n.metadata as any}
-                    hasActiveDecision={hasActiveDecision}
+                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2">
+                  {locale === 'ar' ? 'في انتظار الموافقة' : 'Needs Approval'}
+                </h3>
+                {waitingApproval.map(plan => (
+                  <ExecutionCard
+                    key={plan.id}
+                    plan={plan}
                     locale={locale}
+                    actionLoading={actionLoading === plan.id}
+                    onApprove={() => handleApprove(plan.id)}
+                    onCancel={() => handleCancel(plan.id)}
                   />
                 ))}
               </>
             )}
 
-            {/* EARLIER SECTION */}
-            {earlierNotifications.length > 0 && (
+            {/* Scheduled */}
+            {scheduledPlans.length > 0 && (
               <>
-                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">Earlier</h3>
-                
-                {earlierNotifications.map(n => (
-                  <NotificationItem 
-                    key={n.id}
-                    title={n.title}
-                    message={n.message}
-                    time={getTimeAgo(n.created_at)}
-                    icon={getIconForCategory(n.category, n.priority)}
-                    isUnread={false}
-                    onClick={() => {}}
-                    category={n.category}
-                    metadata={n.metadata as any}
-                    hasActiveDecision={hasActiveDecision}
+                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
+                  {locale === 'ar' ? 'مجدول' : 'Scheduled'}
+                </h3>
+                {scheduledPlans.map(plan => (
+                  <ExecutionCard
+                    key={plan.id}
+                    plan={plan}
                     locale={locale}
+                    actionLoading={actionLoading === plan.id}
+                    onCancel={() => handleCancel(plan.id)}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* Failed */}
+            {failedPlans.length > 0 && (
+              <>
+                <h3 className="text-white/40 text-xs font-bold uppercase tracking-widest px-2 py-2 mt-4">
+                  {locale === 'ar' ? 'فشل' : 'Failed'}
+                </h3>
+                {failedPlans.map(plan => (
+                  <ExecutionCard
+                    key={plan.id}
+                    plan={plan}
+                    locale={locale}
+                    actionLoading={actionLoading === plan.id}
+                    onRetry={() => handleRetry(plan.id)}
+                    onCancel={() => handleCancel(plan.id)}
                   />
                 ))}
               </>
@@ -306,131 +270,160 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {/* Floating Action Button */}
-      <div className="absolute bottom-24 left-0 right-0 flex justify-center z-30 pointer-events-none">
-      </div>
-
-      {/* Background Gradient Overlay */}
+      {/* Background Gradient */}
       <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#112117] to-transparent pointer-events-none z-10"></div>
       <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#112117] via-[#112117]/80 to-transparent pointer-events-none z-10"></div>
-      
-      <PaywallModal 
-        isOpen={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        featureName={paywallFeature}
-        triggerLocation={paywallTrigger}
-      />
     </div>
   );
 }
 
-function NotificationItem({ 
-  title, 
-  message, 
-  time, 
-  icon: Icon, 
-  isUnread, 
-  onClick,
-  category,
-  metadata,
-  hasActiveDecision,
-  locale
-}: { 
-  title: string; 
-  message: string; 
-  time: string; 
-  icon: React.ElementType; 
-  isUnread: boolean; 
-  onClick?: () => void;
-  category?: string;
-  metadata?: { pro_eligible?: boolean; reason?: string; action_status?: string };
-  hasActiveDecision: boolean;
+function ExecutionCard({ 
+  plan, 
+  locale, 
+  actionLoading,
+  onApprove,
+  onRetry,
+  onCancel,
+}: {
+  plan: ExecutionPlan;
   locale: string;
+  actionLoading: boolean;
+  onApprove?: () => void;
+  onRetry?: () => void;
+  onCancel?: () => void;
 }) {
-  const displayTitle = title || (locale === 'ar' ? 'معلومات' : 'Informational');
-  const isRelatedToDecision = hasActiveDecision && (category === 'ai' || category === 'conflict' || category === 'task');
-  const isInformational = !hasActiveDecision || category === 'success' || category === 'achievement';
+  const icon = getIconForType(plan.intent_type);
+  const Icon = icon;
+
+  const scheduledDate = new Date(plan.scheduled_for);
+  const formattedDate = scheduledDate.toLocaleString(
+    locale === 'ar' ? 'ar-EG' : 'en-US',
+    { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+  );
+
+  const title = plan.payload?.title || plan.payload?.subject || plan.payload?.message || 
+                (locale === 'ar' ? 'إجراء' : 'Action');
+
+  const isApprovalNeeded = plan.status === 'waiting_approval';
+  const isFailed = plan.status === 'failed';
+  const isScheduled = plan.status === 'scheduled';
 
   return (
-    <div 
-      onClick={onClick}
-      className={cn(
-        "group relative w-full touch-pan-x cursor-pointer",
-      )}
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative w-full"
     >
       <div className={cn(
-        "relative flex items-start gap-4 p-5 rounded-2xl shadow-lg transition-transform active:scale-[0.98]",
-        isUnread 
-          ? "bg-[#23362b] border-l-4 border-[#30e87a]" 
-          : "bg-[#1A2C22] border border-white/5"
+        "flex flex-col gap-4 p-5 rounded-2xl shadow-lg border transition-all",
+        isApprovalNeeded && "bg-[#2d3b21] border-[#30e87a]/30",
+        isFailed && "bg-[#3b2121] border-red-500/30",
+        isScheduled && "bg-[#1A2C22] border-white/5"
       )}>
-        <div className="relative">
+        {/* Header */}
+        <div className="flex items-start gap-4">
           <div className={cn(
             "flex items-center justify-center rounded-xl size-12 shrink-0",
-            isUnread ? "bg-[#30e87a]/20 text-[#30e87a]" : "bg-[#23362b] text-[#9db8a8]"
+            isApprovalNeeded && "bg-[#30e87a]/20 text-[#30e87a]",
+            isFailed && "bg-red-500/20 text-red-400",
+            isScheduled && "bg-[#23362b] text-[#9db8a8]"
           )}>
             <Icon className="w-6 h-6" />
           </div>
-          {isUnread && (
-            <div className="absolute -top-1 -right-1 size-3 bg-[#30e87a] rounded-full border-2 border-[#23362b]"></div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-semibold text-base mb-1 truncate">{title}</p>
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{formattedDate}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Preview for Email/WhatsApp */}
+        {(plan.intent_type === 'email' || plan.intent_type === 'whatsapp') && plan.payload?.message && (
+          <div className="p-3 rounded-lg bg-black/20 border border-white/5">
+            <p className="text-white/80 text-sm line-clamp-3">{plan.payload.message}</p>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {isFailed && plan.error_message && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-red-400 text-xs">{plan.error_message}</p>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          {isApprovalNeeded && onApprove && (
+            <>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={actionLoading}
+                onClick={onApprove}
+                className="flex-1 px-4 py-3 rounded-xl bg-[#30e87a] text-[#052e16] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {locale === 'ar' ? 'موافقة وتنفيذ' : 'Approve & Execute'}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={actionLoading}
+                onClick={onCancel}
+                className="px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+              </motion.button>
+            </>
+          )}
+
+          {isFailed && onRetry && (
+            <>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={actionLoading}
+                onClick={onRetry}
+                className="flex-1 px-4 py-3 rounded-xl bg-[#30e87a] text-[#052e16] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={actionLoading}
+                onClick={onCancel}
+                className="px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+              </motion.button>
+            </>
+          )}
+
+          {isScheduled && onCancel && (
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              disabled={actionLoading}
+              onClick={onCancel}
+              className="w-full px-4 py-3 rounded-xl bg-[#23362b] text-white/80 font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+            </motion.button>
           )}
         </div>
-        <div className="flex flex-1 flex-col justify-center min-w-0">
-          <div className="flex justify-between items-start mb-0.5">
-            <div className="flex items-center gap-2">
-              <p className={cn(
-                "text-base leading-tight truncate pr-2",
-                isUnread ? "text-white font-semibold" : "text-white/80 font-medium"
-              )}>
-                {displayTitle}
-              </p>
-              {isRelatedToDecision && (
-                <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider">
-                  {locale === 'ar' ? 'متعلق بتركيز اليوم' : "Related to today's focus"}
-                </span>
-              )}
-              {isInformational && (
-                <span className="px-1.5 py-0.5 rounded-md bg-muted/20 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
-                  {locale === 'ar' ? 'لا يتطلب إجراء' : 'No action required'}
-                </span>
-              )}
-            </div>
-            <span className={cn(
-              "text-xs font-medium whitespace-nowrap",
-              isUnread ? "text-[#30e87a]" : "text-white/30"
-            )}>
-              {time}
-            </span>
-          </div>
-          <p className={cn(
-            "text-sm font-normal leading-relaxed line-clamp-2",
-            isUnread ? "text-[#9db8a8]" : "text-white/40"
-          )}>
-            {message}
-          </p>
-        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-function getIconForCategory(category: string, priority: string) {
-  if (category === 'conflict' || priority === 'urgent') return AlertTriangle;
-  if (category === 'shopping' || category === 'task') return ShoppingBasket;
-  if (category === 'calendar' || category === 'event') return Calendar;
-  if (category === 'success' || category === 'achievement') return CheckCircle2;
-  if (category === 'idea' || category === 'insight') return Lightbulb;
-  if (category === 'ai') return Sparkles;
-  return Bell;
-}
-
-function getTimeAgo(timestamp: string): string {
-  const now = new Date();
-  const date = new Date(timestamp);
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (seconds < 60) return 'Just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
+function getIconForType(type: string) {
+  switch (type) {
+    case 'email': return Mail;
+    case 'whatsapp': return MessageSquare;
+    case 'alarm': return Bell;
+    case 'reminder': return Calendar;
+    case 'notification': return AlertCircle;
+    default: return Bell;
+  }
 }

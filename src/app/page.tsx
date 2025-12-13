@@ -316,7 +316,7 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
       >
         <h3 className="text-[14px] font-bold text-foreground mb-3 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-accent" />
-          {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+          {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
         </h3>
         <div className="text-center py-4">
           <p className="text-[13px] text-muted-foreground">
@@ -338,7 +338,7 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
       >
         <h3 className="text-[14px] font-bold text-muted-foreground mb-3 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-muted-foreground" />
-          {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+          {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
         </h3>
         <div className="text-center py-4">
           <p className="text-[12px] text-muted-foreground/60">
@@ -359,7 +359,7 @@ function DecisionScopedCalendar({ activeTask, locale }: { activeTask: any; local
     >
       <h3 className="text-[14px] font-bold text-foreground mb-4 flex items-center gap-2">
         <Calendar className="w-4 h-4 text-accent" />
-        {locale === 'ar' ? 'جدول اليوم' : 'Today & Tomorrow'}
+        {locale === 'ar' ? 'اليوم وغدًا' : 'Today & Tomorrow'}
       </h3>
       
       <div className="space-y-2">

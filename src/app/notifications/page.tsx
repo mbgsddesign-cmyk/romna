@@ -299,11 +299,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Floating Action Button */}
-      <div className="absolute bottom-8 left-0 right-0 flex justify-center z-30 pointer-events-none">
-        <button className="pointer-events-auto flex items-center gap-3 bg-[#30e87a] text-[#052e16] px-6 py-4 rounded-full shadow-[0_0_20px_-5px_rgba(48,232,122,0.3)] hover:scale-105 active:scale-95 transition-all duration-300 group">
-          <Mic className="w-7 h-7 group-hover:animate-pulse" />
-          <span className="text-base font-bold tracking-tight">Ask ROMANA</span>
-        </button>
+      <div className="absolute bottom-24 left-0 right-0 flex justify-center z-30 pointer-events-none">
       </div>
 
       {/* Background Gradient Overlay */}
@@ -343,6 +339,7 @@ function NotificationItem({
   hasActiveDecision: boolean;
   locale: string;
 }) {
+  const displayTitle = title || (locale === 'ar' ? 'معلومات' : 'Informational');
   const isRelatedToDecision = hasActiveDecision && (category === 'ai' || category === 'conflict' || category === 'task');
   const isInformational = !hasActiveDecision || category === 'success' || category === 'achievement';
 
@@ -377,16 +374,16 @@ function NotificationItem({
                 "text-base leading-tight truncate pr-2",
                 isUnread ? "text-white font-semibold" : "text-white/80 font-medium"
               )}>
-                {title}
+                {displayTitle}
               </p>
               {isRelatedToDecision && (
                 <span className="px-1.5 py-0.5 rounded-md bg-accent/20 text-accent text-[10px] font-bold uppercase tracking-wider">
-                  {locale === 'ar' ? 'مرتبط' : 'Related'}
+                  {locale === 'ar' ? 'متعلق بتركيز اليوم' : "Related to today's focus"}
                 </span>
               )}
               {isInformational && (
                 <span className="px-1.5 py-0.5 rounded-md bg-muted/20 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
-                  {locale === 'ar' ? 'معلومات' : 'Info'}
+                  {locale === 'ar' ? 'لا يتطلب إجراء' : 'No action required'}
                 </span>
               )}
             </div>

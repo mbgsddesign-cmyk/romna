@@ -4,8 +4,12 @@ import path from "node:path";
 // Loader path from orchids-visual-edits - use direct resolve to get the actual file
 const loaderPath = require.resolve('orchids-visual-edits/loader.js');
 
+const isNetlifyExport = process.env.NETLIFY_EXPORT === 'true';
+
 const nextConfig: NextConfig = {
+  output: isNetlifyExport ? 'export' : undefined,
   images: {
+    unoptimized: isNetlifyExport,
     remotePatterns: [
       {
         protocol: 'https',

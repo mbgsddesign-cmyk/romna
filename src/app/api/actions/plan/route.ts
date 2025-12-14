@@ -56,11 +56,27 @@ export async function POST(req: NextRequest) {
     const executionService = new ExecutionService(supabase);
 
     // Determine if approval is required
-    const requiresApproval = ['email', 'whatsapp'].includes(intent);
+    let requiresApproval = ['email', 'whatsapp'].includes(intent);
+
+    // Check integration preferences if available
+    try {
+      const { data: integrations } = await supabase
+        .from('user_integrations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('type', intent === 'email' ? 'gmail' : intent === 'whatsapp' ? 'whatsapp' : 'none'); // Simple mapping
+
+      const targetIntegration = integrations?.[0];
+      if (targetIntegration?.metadata && typeof targetIntegration.metadata.require_approval === 'boolean') {
+        requiresApproval = targetIntegration.metadata.require_approval;
+      }
+    } catch (e) {
+      console.warn("Failed to check preference, using default:", e);
+    }
 
     // Determine scheduled_for
     let finalScheduledFor = scheduledFor || new Date().toISOString();
-    
+
     // If it's a reminder with future time, use that
     if (intent === 'reminder' && payload?.scheduledFor) {
       finalScheduledFor = payload.scheduledFor;
@@ -127,8 +143,8 @@ export async function POST(req: NextRequest) {
         message: requiresApproval
           ? 'Plan created. Please approve to execute.'
           : new Date(finalScheduledFor) > new Date()
-          ? `Scheduled for ${new Date(finalScheduledFor).toLocaleString()}`
-          : 'Executing now...',
+            ? `Scheduled for ${new Date(finalScheduledFor).toLocaleString()}`
+            : 'Executing now...',
         requiresApproval,
         scheduledFor: finalScheduledFor,
       },

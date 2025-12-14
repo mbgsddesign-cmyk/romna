@@ -28,12 +28,13 @@ import { SectionHeader, EmptyState } from '@/components/romna';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { BottomNav } from '@/components/bottom-nav';
+import { diag } from '@/lib/diag'; // [DIAG]
+import { EmailAccountManager } from '@/components/email-account-manager'; // [NEW]
 
 export default function SettingsPage() {
   const { t, locale } = useTranslation();
   const { setTheme } = useTheme();
-  const { user, profile, signOut, isAdmin, refreshProfile } = useAuth();
+  const { user, profile, signOut, isAdmin, refreshProfile, isLocal } = useAuth();
   const router = useRouter();
   const {
     locale: currentLocale,
@@ -51,11 +52,16 @@ export default function SettingsPage() {
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
   const [aiOptIn, setAiOptIn] = useState(false);
   const [updatingOptIn, setUpdatingOptIn] = useState(false);
+  const [isMounted, setIsMounted] = useState(false); // [HYDRATION-FIX]
 
   useEffect(() => {
-    refreshProfile();
-    fetchAIOptInStatus();
-  }, [refreshProfile]);
+    setIsMounted(true); // [HYDRATION-FIX]
+    if (user?.id) {
+      refreshProfile();
+      fetchAIOptInStatus();
+      diag('SETTINGS_MOUNT', { userId: user.id }); // [DIAG]
+    }
+  }, [user?.id]); // Only run when user ID changes (login/logout)
 
   const fetchAIOptInStatus = async () => {
     if (!user?.id) return;
@@ -66,7 +72,7 @@ export default function SettingsPage() {
         .select('ai_opt_in')
         .eq('user_id', user.id)
         .single();
-      
+
       if (data) {
         setAiOptIn(data.ai_opt_in ?? false);
       }
@@ -80,7 +86,7 @@ export default function SettingsPage() {
     setUpdatingOptIn(true);
     try {
       const { supabase } = await import('@/lib/supabase');
-      
+
       const { error } = await supabase
         .from('user_preferences')
         .upsert({
@@ -175,6 +181,7 @@ export default function SettingsPage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
+        key={isMounted ? 'client' : 'server'} // [HYDRATION-FIX] Force re-render
       >
         <motion.header variants={itemVariants} className="pt-6 pb-6">
           <h1 className="text-[32px] font-extrabold text-foreground">{t('settings')}</h1>
@@ -192,7 +199,9 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold text-[16px] text-foreground">{profile?.name || 'User'}</h3>
+                    <h3 className="font-semibold text-[16px] text-foreground">
+                      {profile?.name || (isLocal ? t('localUser') : 'User')}
+                    </h3>
                     {isAdmin && (
                       <Badge className="bg-primary/20 text-primary text-[11px] border-0">
                         <Shield className="w-3 h-3 mr-1" />
@@ -200,11 +209,13 @@ export default function SettingsPage() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[14px] text-muted-foreground">{user?.email}</p>
+                  <p className="text-[14px] text-muted-foreground">
+                    {user?.email || t('noAccountYet')}
+                  </p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge className={cn("text-[11px] border-0 neon-glow", getPlanBadgeColor(profile?.subscription?.plan))}>
                       <PlanIcon className="w-3 h-3 mr-1" />
-                      {(profile?.subscription?.plan || 'free').toUpperCase()} {t('plan')}
+                      {(profile?.subscription?.plan || t('free')).toUpperCase()}
                     </Badge>
                   </div>
                 </div>
@@ -219,8 +230,8 @@ export default function SettingsPage() {
                     {profile.usageTracking.ai_tokens_used.toLocaleString()} / {profile.planLimits.monthly_ai_tokens === -1 ? '∞' : profile.planLimits.monthly_ai_tokens.toLocaleString()}
                   </span>
                 </div>
-                <Progress 
-                  value={getUsagePercentage(profile.usageTracking.ai_tokens_used, profile.planLimits.monthly_ai_tokens)} 
+                <Progress
+                  value={getUsagePercentage(profile.usageTracking.ai_tokens_used, profile.planLimits.monthly_ai_tokens)}
                   className="h-2"
                 />
                 {profile.subscription?.current_period_end && (
@@ -248,22 +259,71 @@ export default function SettingsPage() {
 
         <motion.section variants={itemVariants} className="mb-6">
           <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('integrations')}</h2>
-          <Link href="/settings/integrations">
-            <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
-              <SettingRow
-                icon={Plug}
-                iconBg="bg-accent/20"
-                iconColor="text-accent"
-                title={t('integrations')}
-                description={connectedCount > 0 ? `${connectedCount} ${t('servicesConnected')}` : t('connectServices')}
-                action={<ChevronRight className="w-5 h-5 text-muted-foreground rtl:rotate-180" />}
-              />
+          <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
+            {/* Email */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm">Email</h3>
+                    {profile?.subscription?.plan === 'free' && <Badge variant="outline" className="text-[10px] h-5">Free</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Used for sending approved messages</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-green-500 font-medium">Connected</span>
+                <Switch checked={true} onCheckedChange={() => { }} />
+              </div>
             </div>
-          </Link>
+
+            {/* 3. EMAIL ACCOUNTS */}
+            <EmailAccountManager userId={user?.id || ''} />
+
+            {/* 4. NOTIFICATIONS */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-[#25D366]"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.592 2.654-.698c1.09.587 1.916.736 2.806.736 3.183 0 5.768-2.587 5.768-5.767s-2.585-5.766-5.768-5.766zM12 18.391c-.79 0-1.767-.294-2.293-.728l-.326-.068-1.574 1.579-.064-.064 1.583-1.58-.066-.328c-.432-.524-.724-1.503-.724-2.292 0-2.618 2.128-4.746 4.746-4.746s4.746 2.128 4.746 4.746-2.126 4.746-4.746 4.746z" /></svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm">WhatsApp</h3>
+                    <Badge variant="secondary" className="text-[10px] h-5 bg-white/10 text-white/50">Pro</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Scheduled messages after approval</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Coming Soon</span>
+                <Switch checked={false} disabled />
+              </div>
+            </div>
+
+            {/* Calendar */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-blue-500 text-lg">calendar_today</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Calendar</h3>
+                  <p className="text-xs text-muted-foreground">Used only for execution timing</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Off</span>
+                <Switch checked={false} onCheckedChange={() => toast.info("Calendar sync coming in next update")} />
+              </div>
+            </div>
+          </div>
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
-          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('subscriptions')}</h2>
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('subscription')}</h2>
           <Link href="/settings/billing">
             <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
               <SettingRow
@@ -299,6 +359,19 @@ export default function SettingsPage() {
                 </Select>
               }
             />
+            {currentLocale === 'ar' && (
+              <div className="p-4 bg-accent/5 border-t border-accent/10">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-4 h-4 rounded-full bg-accent flex items-center justify-center shrink-0">
+                    <span className="text-[10px] text-black font-bold">β</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-foreground leading-tight mb-1">{t('betaNotice')}</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">{t('betaNoticeDesc')}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <SettingRow
               icon={Palette}
               iconBg="bg-[#F3C96B]/20"
@@ -320,6 +393,134 @@ export default function SettingsPage() {
             />
           </div>
         </motion.section>
+
+        <motion.section variants={itemVariants} className="mb-6">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Feedback</h2>
+          <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
+            {/* Sound */}
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-[16px] bg-volt/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-volt">volume_up</span>
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-foreground">Sound Effects</h3>
+                  <p className="text-[13px] text-muted-foreground">Play soft tones for confirmation</p>
+                </div>
+              </div>
+              <Switch
+                checked={useAppStore(s => s.feedback.soundEnabled)}
+                onCheckedChange={(checked) => useAppStore.getState().setFeedback({ soundEnabled: checked })}
+              />
+            </div>
+
+            {/* Haptics */}
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-[16px] bg-volt/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-volt">vibration</span>
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-foreground">Haptics</h3>
+                  <p className="text-[13px] text-muted-foreground">Vibrate on success/error</p>
+                </div>
+              </div>
+              <Switch
+                checked={useAppStore(s => s.feedback.hapticsEnabled)}
+                onCheckedChange={(checked) => useAppStore.getState().setFeedback({ hapticsEnabled: checked })}
+              />
+            </div>
+
+            {/* Background Notification */}
+            <div className="p-5 bg-muted/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-[16px] bg-blue-500/10 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-blue-500">notifications</span>
+                  </div>
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-foreground">Background Alerts</h3>
+                    <p className="text-[13px] text-muted-foreground">Notify when app is closed</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Test Button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-[11px] text-muted-foreground hover:text-foreground"
+                    onClick={async () => {
+                      const { BackgroundNotificationEngine } = await import('@/lib/background-notification-engine');
+                      const granted = await BackgroundNotificationEngine.requestPermission();
+                      if (granted) {
+                        toast.success('Permission Granted');
+                        setTimeout(() => {
+                          BackgroundNotificationEngine.trigger('EXECUTED', 'Test Notification Working');
+                        }, 1000);
+                      } else {
+                        toast.error('Permission Denied');
+                      }
+                    }}
+                  >
+                    Test
+                  </Button>
+
+                  <Switch
+                    checked={useAppStore(s => s.feedback.backgroundNotifications)}
+                    onCheckedChange={async (checked) => {
+                      if (checked) {
+                        const { BackgroundNotificationEngine } = await import('@/lib/background-notification-engine');
+                        const granted = await BackgroundNotificationEngine.requestPermission();
+                        if (!granted) {
+                          toast.error('Notifications permission needed');
+                          return;
+                        }
+                      }
+                      useAppStore.getState().setFeedback({ backgroundNotifications: checked })
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Nested Background Options */}
+              {useAppStore(s => s.feedback.backgroundNotifications) && (
+                <div className="pl-[72px] pr-0 pt-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] text-muted-foreground">Background Sound</span>
+                    <Switch
+                      className="scale-75 origin-right"
+                      checked={useAppStore(s => s.feedback.backgroundSound)}
+                      onCheckedChange={(checked) => useAppStore.getState().setFeedback({ backgroundSound: checked })}
+                    />
+                  </div>
+                  {/* Note: Vibration in background is tricky on Web, but we keep the toggle for future/PWA */}
+                </div>
+              )}
+            </div>
+
+            {/* Automation (Beta) */}
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-[16px] bg-purple-500/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-purple-500">auto_fix_high</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[15px] font-semibold text-foreground">Automation</h3>
+                    <Badge variant="outline" className="text-[10px] h-5 border-purple-500/50 text-purple-500">Beta</Badge>
+                  </div>
+                  <p className="text-[13px] text-muted-foreground">Let ROMNA handle obvious tasks</p>
+                </div>
+              </div>
+              <Switch
+                checked={useAppStore(s => s.feedback.autoExecutionEnabled)}
+                onCheckedChange={(checked) => useAppStore.getState().setFeedback({ autoExecutionEnabled: checked })}
+              />
+            </div>
+
+          </div>
+        </motion.section>
+
 
         <motion.section variants={itemVariants} className="mb-6">
           <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">AutoGLM</h2>
@@ -345,8 +546,8 @@ export default function SettingsPage() {
             <div className="px-5 pb-5 pt-0">
               <div className="rounded-[14px] bg-muted/30 p-4">
                 <p className="text-[12px] text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground">Privacy First:</strong> AutoGLM runs in the background to help organize your day. 
-                  All suggestions require your approval before any action is taken. 
+                  <strong className="text-foreground">Privacy First:</strong> AutoGLM runs in the background to help organize your day.
+                  All suggestions require your approval before any action is taken.
                   You can disable this anytime. No data is shared with third parties.
                 </p>
               </div>
@@ -443,6 +644,34 @@ export default function SettingsPage() {
         </motion.section>
 
         <motion.section variants={itemVariants} className="mb-6">
+          <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">Advanced</h2>
+          <div className="glass-card p-0 overflow-hidden divide-y divide-border/30">
+            <div className="p-5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-[16px] bg-red-500/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-red-500">replay</span>
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-foreground">Reset Voice Onboarding</h3>
+                  <p className="text-[13px] text-muted-foreground">Show the "Done" confirmation again</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 border-red-500/20 text-red-500 hover:bg-red-500/10"
+                onClick={() => {
+                  localStorage.removeItem('romna_silent_mode');
+                  toast.success("Voice onboarding reset");
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section variants={itemVariants} className="mb-6">
           <h2 className="text-[14px] font-bold text-accent uppercase tracking-wider mb-3">{t('aboutRomna')}</h2>
           <a href="https://romnaai.netlify.app/" target="_blank" rel="noopener noreferrer">
             <div className="glass-card-hover glass-card p-0 overflow-hidden cursor-pointer">
@@ -458,8 +687,23 @@ export default function SettingsPage() {
           </a>
         </motion.section>
 
-        {user && (
-          <motion.section variants={itemVariants} className="mb-8">
+        <motion.section variants={itemVariants} className="mb-8 space-y-3">
+          {/* If Local, show Sync Option */}
+          {!user && (
+            <div className="p-4 rounded-[16px] bg-volt/5 border border-volt/10">
+              <h3 className="text-volt font-bold text-sm mb-1">Sync to Cloud</h3>
+              <p className="text-xs text-muted-foreground mb-3">Backup your tasks and access them anywhere.</p>
+              <Button
+                className="w-full bg-volt text-black hover:bg-volt/90 font-bold"
+                onClick={() => router.push('/auth/login')}
+              >
+                <Plug className="w-4 h-4 mr-2" />
+                Link Account
+              </Button>
+            </div>
+          )}
+
+          {user ? (
             <Button
               variant="outline"
               className="w-full h-12 text-destructive border-destructive/30 hover:bg-destructive/10 rounded-[16px] font-semibold"
@@ -468,11 +712,24 @@ export default function SettingsPage() {
               <LogOut className="w-4 h-4 mr-2" />
               {t('logout')}
             </Button>
-          </motion.section>
-        )}
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full h-12 text-muted-foreground border-white/5 hover:bg-white/5 rounded-[16px] font-medium text-xs"
+              onClick={() => {
+                // Reset Local Data
+                if (confirm("Reset all local data and return to welcome screen? This cannot be undone.")) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Reset App
+            </Button>
+          )}
+        </motion.section>
       </motion.div>
-
-      <BottomNav />
 
       <Sheet open={isAddEmailOpen} onOpenChange={setIsAddEmailOpen}>
         <SheetContent side="bottom" className="rounded-t-[22px] pb-8">
@@ -503,7 +760,7 @@ export default function SettingsPage() {
           <SheetHeader className="pb-4">
             <SheetTitle className="text-xl font-semibold">{t('manageSubscription')}</SheetTitle>
           </SheetHeader>
-          
+
           <div className="space-y-4">
             <Card className={cn(
               "p-4 border-2",

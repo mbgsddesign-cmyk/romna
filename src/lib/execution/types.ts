@@ -1,31 +1,32 @@
-export type ExecutionSource = 'voice' | 'text';
+export type ExecutionSource = 'voice' | 'text' | 'button' | 'ask';
 
-export type ExecutionIntentType = 
-  | 'reminder' 
-  | 'alarm' 
-  | 'email' 
-  | 'whatsapp' 
-  | 'notification';
+export type ExecutionIntentType =
+  | 'reminder'
+  | 'alarm'
+  | 'email'
+  | 'whatsapp'
+  | 'notification'
+  | 'task';
 
-export type ExecutionPlanStatus = 
-  | 'pending' 
-  | 'waiting_approval' 
-  | 'scheduled' 
-  | 'executed' 
-  | 'cancelled' 
+export type ExecutionPlanStatus =
+  | 'pending'
+  | 'waiting_approval'
+  | 'scheduled'
+  | 'executed'
+  | 'cancelled'
   | 'failed';
 
-export type ExecutionQueueStatus = 
-  | 'scheduled' 
-  | 'executing' 
-  | 'executed' 
-  | 'failed' 
+export type ExecutionQueueStatus =
+  | 'scheduled'
+  | 'executing'
+  | 'executed'
+  | 'failed'
   | 'cancelled';
 
-export type ExecutionType = 
-  | 'notification' 
-  | 'alarm' 
-  | 'email' 
+export type ExecutionType =
+  | 'notification'
+  | 'alarm'
+  | 'email'
   | 'whatsapp';
 
 export interface ExecutionPlan {
@@ -39,6 +40,7 @@ export interface ExecutionPlan {
   payload: Record<string, unknown>;
   created_at: string;
   executed_at?: string;
+  approved_at?: string;
   error_message?: string;
 }
 

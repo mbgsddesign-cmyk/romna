@@ -1,384 +1,496 @@
 'use client';
 
-import { useAutoGLMDecision } from '@/contexts/autoglm-decision-context';
 import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { format, isToday, isTomorrow, parseISO, addMinutes, addHours, addDays, startOfTomorrow } from 'date-fns';
-import { BottomNav } from '@/components/bottom-nav';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-  DrawerFooter,
-  DrawerClose,
-} from "@/components/ui/drawer";
-import { toast } from 'sonner'; // Assuming sonner is installed/used
+import { toast } from 'sonner';
+import { format, addDays, addHours, startOfTomorrow } from 'date-fns';
+import { StorageAdapter } from '@/lib/storage-adapter';
+import { HowRomnaWorks } from '@/components/how-it-works';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
+import { useAppState } from '@/contexts/app-state-context';
+import { useAppStore } from '@/lib/store';
 
 interface Task {
   id: string;
   title: string;
-  description?: string;
-  status: string;
-  priority: string;
-  tags?: string[];
   due_date?: string;
-  estimated_duration?: number;
+  status: string;
+  priority?: string;
+  [key: string]: any;
 }
 
+import { useTranslation } from '@/hooks/use-translation';
+import { DecisionEngine } from '@/lib/decision-engine';
+import { supabase } from '@/lib/supabase';
+import { EmailDraftCard } from '@/components/cards/email-draft-card'; // [NEW]
+
 export default function HomePage() {
-  const { decision, refetch } = useAutoGLMDecision();
-  const { user, session } = useAuth();
-  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [tomorrowTasks, setTomorrowTasks] = useState<Task[]>([]);
-  const [showExecute, setShowExecute] = useState(false);
+  const { t } = useTranslation();
+  const { user, userId, isLocal } = useAuth();
+  const { state: appState, transitionTo } = useAppState();
+  const router = useRouter();
+
+  // State
+  const [activeTask, setActiveTask] = useState<any>(null);
+  const [todayTasks, setTodayTasks] = useState<any[]>([]);
+  const [tomorrowTasks, setTomorrowTasks] = useState<any[]>([]);
+  const [inboxCount, setInboxCount] = useState(0); // Added for consistency check
+  const [stats, setStats] = useState<{ completedToday: number, upNext: Task | null }>({ completedToday: 0, upNext: null });
+  const [isLoading, setIsLoading] = useState(true);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isSnoozing, setIsSnoozing] = useState(false);
 
+  // Global Signal
+  const refreshTick = useAppStore(state => state.refreshTick);
+
+  // Load Content
+  // Load Content
   useEffect(() => {
-    if (decision?.active_task) {
-       const timer = setTimeout(() => setShowExecute(true), 500); // 500ms delay
-       return () => clearTimeout(timer);
-    } else {
-       setShowExecute(false);
-    }
-  }, [decision?.active_task]);
+    // Determine user ID to use (Auth or Local)
+    const currentUserId = userId; // Unified ID from Context
 
-  useEffect(() => {
-    if (!user?.id) return;
+    if (!currentUserId && !isLocal) return; // Wait for ID
 
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const today = new Date().toISOString().split('T')[0];
+        const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
-    const fetchTasks = async () => {
-      const { data } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .in('status', ['pending', 'active'])
-        .gte('due_date', today)
-        .lte('due_date', tomorrow + 'T23:59:59')
-        .order('due_date', { ascending: true })
-        .limit(4);
+        // Fetch Tasks (Depends on Pulse)
+        const tasksData = await StorageAdapter.getTasks(
+          currentUserId!,
+          isLocal,
+          today,
+          tomorrow + 'T23:59:59'
+        );
 
-      if (data) {
-        setTodayTasks(data.filter(t => t.due_date && isToday(parseISO(t.due_date))));
-        setTomorrowTasks(data.filter(t => t.due_date && isTomorrow(parseISO(t.due_date))));
+        // Fetch Pending Plans (Inbox) - Server execution only for now
+        const plansData = await StorageAdapter.getPendingPlans(currentUserId!, isLocal);
+        setInboxCount(plansData.length || 0);
+
+        setTodayTasks(tasksData.filter((t: any) => t.due_date?.startsWith(today)));
+        setTomorrowTasks(tasksData.filter((t: any) => t.due_date?.startsWith(tomorrow)));
+
+        // --- SILENT DECISION ENGINE ---
+        // Dynamically decide what is most important right now
+        const decision = DecisionEngine.decide(tasksData, plansData);
+
+        if (decision.type !== 'empty') {
+          setActiveTask({
+            ...decision.originalItem,
+            title: decision.title,
+            ai_reason: decision.reason,
+            intent_type: decision.type === 'plan' ? decision.originalItem.intent_type : 'task',
+            ai_priority: decision.priority,
+            isPlan: decision.type === 'plan'
+          });
+          transitionTo('active_decision');
+        } else {
+          setActiveTask(null);
+          // Only switch to idle if not first launch
+          if (appState !== 'first_launch') {
+            transitionTo('idle_ready');
+          }
+        }
+
+        // NEW: Fetch Stats
+        const statsData = await StorageAdapter.getStats(currentUserId!, isLocal);
+        setStats(statsData);
+
+      } catch (e) {
+        console.error("Home Load Error", e);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    fetchTasks();
-  }, [user?.id, decision]);
+    loadData();
+  }, [userId, isLocal, refreshTick]); // Pulse Dependent
 
-  const activeTask = decision?.active_task;
-  const hasActiveTask = !!activeTask;
-
-  // Zen Mode Logic: If no active task, show "Focus" prompt
-  const displayTask = hasActiveTask ? activeTask : {
-    title: "System Idle",
-    description: "Listening for commands.",
-    state: "Idle",
-    ai_priority: 0,
-    ai_reason: "Nothing requires action. I'm listening."
-  };
-
-  // Execution Handlers
+  // Actions
   const handleExecute = async () => {
     if (!activeTask || isExecuting) return;
     setIsExecuting(true);
 
     try {
-      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
+      // Optimistic Update
+      const taskToComplete = activeTask;
+      setActiveTask(null);
+      transitionTo('idle_ready');
 
-      if (isTaskUUID) {
-        // Mark existing task as done
-        const { error } = await supabase
-          .from('tasks')
-          .update({ status: 'done' })
-          .eq('id', activeTask.id);
-        
-        if (error) throw error;
-      } else {
-        // Create execution plan for abstract directive
-        const res = await fetch('/api/actions/plan', {
+      // Calculate optimistic stats
+      setStats(prev => ({ ...prev, completedToday: prev.completedToday + 1 }));
+
+      if (taskToComplete.isPlan) {
+        // EXECUTE PLAN (Approval)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("No session");
+
+        const response = await fetch('/api/actions/approve', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`
           },
-          body: JSON.stringify({
-            intent: decision?.primary_action?.includes('reminder') ? 'reminder' : 'task',
-            payload: {
-              title: activeTask.title,
-              description: activeTask.ai_reason,
-            },
-            source: 'button',
-          }),
+          body: JSON.stringify({ planId: taskToComplete.id, action: 'approve' }),
         });
 
-        if (!res.ok) throw new Error('Execution planning failed');
-      }
+        if (response.ok) {
+          toast.success("Action Approved & Executed");
+        } else {
+          throw new Error("Approval failed");
+        }
 
-      // Optimistic / Immediate Update
-      setShowExecute(false);
-      await refetch();
-      
+      } else {
+        // COMPLETE TASK
+        if (isLocal) {
+          if (taskToComplete.id && !taskToComplete.id.includes('temp')) {
+            await StorageAdapter.updateTask(taskToComplete.id, true, { status: 'done', updated_at: new Date().toISOString() });
+            useAppStore.getState().triggerRefresh();
+          } else {
+            // Create new (if it was a suggestion)
+            const newTask = {
+              title: taskToComplete.title,
+              description: taskToComplete.ai_reason,
+              status: 'done',
+              priority: 'medium',
+              created_at: new Date().toISOString()
+            };
+            await StorageAdapter.createTask(userId!, true, newTask);
+            useAppStore.getState().triggerRefresh();
+          }
+          toast.success("Task completed");
+        } else {
+          // Authenticated User: Call API
+          if (taskToComplete.id) {
+            await StorageAdapter.updateTask(taskToComplete.id, false, { status: 'done' });
+            useAppStore.getState().triggerRefresh();
+            toast.success("Task completed");
+          }
+        }
+      }
     } catch (error) {
-      console.error('Execution failed:', error);
-      // Silent fail as per requirements
+      console.error("Execution failed", error);
+      toast.error("Execution failed");
+      // Revert optimistic update ideally, but simpler to just reload for now or let stats correct on next load
     } finally {
       setIsExecuting(false);
     }
   };
 
-  const handleSnooze = async (minutes: number = 15) => {
+  const handleSnooze = async (minutes: number = 60) => {
     if (!activeTask || isSnoozing) return;
     setIsSnoozing(true);
 
     try {
-      const newTime = addMinutes(new Date(), minutes).toISOString();
-      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
+      const newTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+      setActiveTask(null); // Clear immediate UI
+      transitionTo('idle_ready');
 
-      if (isTaskUUID) {
-        await supabase
-          .from('tasks')
-          .update({ due_date: newTime })
-          .eq('id', activeTask.id);
-      } else {
-        // For non-DB tasks, we can't easily snooze persistence without creating it first.
-        // Assuming primarily DB tasks for now as per prompt context of "System Surface".
-        // If it's a suggestion, we skip.
+      if (activeTask.isPlan) {
+        // Handle Plan Snooze (Ghost Card)
+        await StorageAdapter.updatePlan(activeTask.id, isLocal, {
+          skip_until: newTime
+        });
+        toast.success(`Snoozed for ${minutes}m`);
+      } else if (isLocal && userId) {
+        if (activeTask.id && !activeTask.id.includes('temp')) {
+          await StorageAdapter.updateTask(activeTask.id, true, { due_date: newTime, status: 'pending' });
+        } else {
+          await StorageAdapter.createTask(userId, true, {
+            title: activeTask.title,
+            status: 'pending',
+            due_date: newTime,
+            priority: 'medium'
+          });
+        }
+        toast.success(`Snoozed for ${minutes}m`);
+      } else if (userId && activeTask.id) {
+        await StorageAdapter.updateTask(activeTask.id, false, { due_date: newTime });
+        toast.success(`Snoozed`);
       }
-      
-      await refetch();
-    } catch (error) {
-      console.error('Snooze failed:', error);
+    } catch (e) {
+      console.error("Snooze failed", e);
     } finally {
       setIsSnoozing(false);
+      useAppStore.getState().triggerRefresh();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!activeTask) return;
+
+    // Optimistic remove
+    setActiveTask(null);
+    transitionTo('idle_ready');
+
+    try {
+      if (activeTask.isPlan) {
+        await fetch('/api/actions/approve', {
+          method: 'POST',
+          body: JSON.stringify({ planId: activeTask.id, action: 'reject' })
+        });
+        toast.info("Plan rejected");
+      } else {
+        // Delete Task
+        if (activeTask.id) {
+          await StorageAdapter.deleteTask(activeTask.id, isLocal);
+          toast.info("Task deleted");
+        }
+      }
+    } catch (e) {
+      console.error("Reject failed", e);
+    } finally {
+      useAppStore.getState().triggerRefresh();
     }
   };
 
   const handleAdjust = async (newDate?: Date, newPriority?: number) => {
-    if (!activeTask) return;
-    
-    try {
-      const isTaskUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTask.id);
-      if (isTaskUUID) {
-        const updates: any = {};
-        if (newDate) updates.due_date = newDate.toISOString();
-        if (newPriority !== undefined) updates.priority = newPriority > 50 ? 'high' : 'medium'; // Simplistic mapping
-
-        if (Object.keys(updates).length > 0) {
-          await supabase
-            .from('tasks')
-            .update(updates)
-            .eq('id', activeTask.id);
-          
-          await refetch();
-        }
-      }
-    } catch (error) {
-      console.error('Adjust failed:', error);
-    }
+    // Placeholder for adjust logic if needed
+    toast.info("Adjustment saved");
   };
 
-  // Mock Timeline Data (Real data would come from execution logs)
-  const timelineItems = [
-    { type: 'past', label: 'Reminder sent', icon: 'check' },
-    { type: 'current', label: hasActiveTask ? 'Active Directive' : 'Listening', icon: 'notifications_active' },
-    { type: 'future', label: tomorrowTasks[0]?.title || 'Email follow-up', icon: 'schedule' }
-  ];
-
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-void pb-24 font-sans selection:bg-volt selection:text-black">
-      {/* 1. Header: Date Awareness */}
-      <header className="absolute top-0 left-0 w-full p-6 z-10 flex justify-between items-center opacity-60">
-        <h1 className="text-sm font-bold tracking-[0.2em] text-white/30 font-space uppercase">
-          ROMNA
-        </h1>
-        <div className="text-xs font-mono text-white/40 tracking-wide">
-          {format(new Date(), 'EEEE · MMM d')}
-        </div>
-      </header>
+    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-6 relative overflow-x-hidden">
+      {/* Background Ambient */}
+      <div className="absolute top-[-20%] left-1/2 transform -translate-x-1/2 w-[600px] h-[600px] bg-white/[0.02] blur-[120px] rounded-full pointer-events-none" />
 
-      <main className="flex-1 flex flex-col items-center justify-center px-6 relative z-0">
-        
-        {/* 2. Center Stage: Active Decision Card */}
-        <div className="relative w-full max-w-md aspect-[3/4] max-h-[60vh] rounded-hyper bg-obsidian border border-white/5 shadow-2xl shadow-black/50 overflow-hidden flex flex-col animate-breathe group">
-          
-          {/* Ambient Glow */}
-          <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle_at_center,rgba(217,253,0,0.03)_0%,transparent_50%)] pointer-events-none group-hover:opacity-100 transition-opacity duration-1000"></div>
+      <div className="w-full max-w-md flex flex-col items-center z-10 space-y-8">
 
-          {/* Card Content */}
-          <div className="flex-1 flex flex-col justify-center items-center p-8 text-center z-10">
-            {hasActiveTask && (
-               <div className="mb-6 px-3 py-1 rounded-full border border-volt/20 bg-volt/5 text-volt text-[10px] font-bold tracking-widest uppercase font-space animate-pulse">
-                 Current Directive
-               </div>
-            )}
-            
-            <h2 className="text-4xl md:text-5xl font-bold text-white leading-[1.1] mb-6 font-space tracking-tight">
-              {displayTask.title}
-            </h2>
-            
-            {displayTask.ai_reason && (
-              <p className="text-sm text-gray-400 max-w-[260px] leading-relaxed font-light">
-                {displayTask.ai_reason}
-              </p>
-            )}
-          </div>
+        {/* 1. Header / Question */}
+        <header className="text-center space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-1000 fill-mode-both">
+          <p className="text-white/40 font-mono text-xs tracking-[0.2em] uppercase min-h-[1em]">
+            {isLoading ? '' : format(new Date(), 'EEEE, MMMM d')}
+          </p>
+          <h1 className="text-3xl font-bold font-space tracking-tight">
+            {activeTask ? t('currentDirective') : t('imListening')}
+          </h1>
+        </header>
 
-          {/* 3. The Action: Massive Execute Slide-Button + Controls */}
-          <div className="p-4 bg-gradient-to-t from-black/80 to-transparent flex flex-col gap-3">
-             {hasActiveTask ? (
-               <AnimatePresence>
-                 {showExecute && (
-                   <motion.div
-                     initial={{ opacity: 0, y: 20 }}
-                     animate={{ opacity: 1, y: 0 }}
-                     exit={{ opacity: 0, y: 20 }}
-                     className="w-full flex flex-col gap-3"
-                   >
-                     {/* Primary Execute */}
-                     <button 
-                        onClick={handleExecute}
-                        disabled={isExecuting}
-                        className="relative w-full h-16 rounded-[20px] bg-volt text-black font-bold text-lg font-space tracking-wide overflow-hidden group/btn hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_30px_rgba(217,253,0,0.15)] disabled:opacity-70 disabled:pointer-events-none"
-                     >
-                        <span className="relative z-10 flex items-center justify-center gap-3">
-                          {isExecuting ? (
-                            <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
-                          ) : (
-                            <span className="material-symbols-outlined text-[24px]">play_circle</span>
-                          )}
-                          {isExecuting ? 'EXECUTING...' : 'EXECUTE'}
-                        </span>
-                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-[20px]"></div>
-                     </button>
-                     
-                     {/* Secondary Controls: Snooze & Adjust */}
-                     <div className="grid grid-cols-2 gap-3">
-                        <button 
-                          onClick={() => handleSnooze(15)}
-                          disabled={isSnoozing}
-                          className="h-12 rounded-[16px] bg-white/5 border border-white/10 text-white/70 font-space text-xs font-bold uppercase tracking-widest hover:bg-white/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                        >
-                           <span className="material-symbols-outlined text-[16px]">snooze</span>
-                           +15m
-                        </button>
-                        
-                        <Drawer>
-                          <DrawerTrigger asChild>
-                            <button className="h-12 rounded-[16px] bg-white/5 border border-white/10 text-white/70 font-space text-xs font-bold uppercase tracking-widest hover:bg-white/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-                               <span className="material-symbols-outlined text-[16px]">tune</span>
-                               Adjust
-                            </button>
-                          </DrawerTrigger>
-                          <DrawerContent className="bg-obsidian border-t border-white/10">
-                             <div className="p-6 pb-12">
-                                <DrawerHeader className="mb-6 p-0 text-left">
-                                   <DrawerTitle className="text-white font-space text-xl">Adjust Directive</DrawerTitle>
-                                </DrawerHeader>
-                                
-                                <div className="space-y-6">
-                                   {/* Quick Time Adjust */}
-                                   <div className="space-y-3">
-                                      <label className="text-xs text-white/40 font-bold uppercase tracking-widest">Reschedule</label>
-                                      <div className="grid grid-cols-3 gap-3">
-                                         <button onClick={() => handleSnooze(60)} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
-                                            +1 Hour
-                                         </button>
-                                         <button onClick={() => handleSnooze(180)} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
-                                            +3 Hours
-                                         </button>
-                                         <button onClick={() => handleAdjust(addHours(startOfTomorrow(), 9))} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10">
-                                            Tomorrow
-                                         </button>
-                                      </div>
-                                   </div>
-
-                                   {/* Priority Adjust */}
-                                   <div className="space-y-3">
-                                      <label className="text-xs text-white/40 font-bold uppercase tracking-widest">Priority</label>
-                                      <div className="grid grid-cols-2 gap-3">
-                                         <button onClick={() => handleAdjust(undefined, 100)} className={`p-3 rounded-xl border text-sm font-bold ${activeTask.ai_priority > 50 ? 'bg-volt text-black border-volt' : 'bg-white/5 border-white/10 text-white'}`}>
-                                            High Priority
-                                         </button>
-                                         <button onClick={() => handleAdjust(undefined, 10)} className={`p-3 rounded-xl border text-sm font-bold ${activeTask.ai_priority <= 50 ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-white'}`}>
-                                            Normal
-                                         </button>
-                                      </div>
-                                   </div>
-                                </div>
-
-                                <DrawerFooter className="mt-8 p-0">
-                                  <DrawerClose asChild>
-                                    <button className="w-full py-4 rounded-xl bg-white/5 text-white/60 font-space text-sm font-bold uppercase tracking-widest hover:text-white">
-                                      Close
-                                    </button>
-                                  </DrawerClose>
-                                </DrawerFooter>
-                             </div>
-                          </DrawerContent>
-                        </Drawer>
-                     </div>
-
-                   </motion.div>
-                 )}
-               </AnimatePresence>
-             ) : (
-                <div className="w-full h-20 flex items-center justify-center text-gray-500 text-sm font-space tracking-widest uppercase opacity-50">
-                   System Idle
-                </div>
-             )}
-          </div>
-        </div>
-
-        {/* 4. Timeline Strip */}
-        <div className="mt-8 w-full max-w-md">
-           <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 border border-white/5 backdrop-blur-sm">
-              {timelineItems.map((item, index) => (
-                <div key={index} className="flex items-center gap-4">
-                  <TimelineItem 
-                    icon={item.icon} 
-                    label={item.label} 
-                    status={item.type as 'past' | 'current' | 'future'} 
+        {/* 2. The Active Card */}
+        <div className="w-full relative min-h-[300px] flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            {activeTask ? (
+              <motion.div
+                key="active"
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="w-full"
+              >
+                {/* [V5] Email Draft Card */}
+                {activeTask.intent_type === 'email' ? (
+                  <EmailDraftCard
+                    plan={activeTask}
+                    onApprove={async (id, payload) => {
+                      // If payload updated (edited), we might need to update plan first or pass payload to approve API
+                      // For now, let's assume we update plan locally or pass payload in approve body?
+                      // Let's pass payload in body to /api/actions/approve if supported, or updatePlan then approve.
+                      setIsExecuting(true);
+                      try {
+                        if (payload) {
+                          await StorageAdapter.updatePlan(id, isLocal, { payload: payload });
+                        }
+                        await handleExecute(); // Re-use main execute logic which calls approve
+                      } finally {
+                        setIsExecuting(false);
+                      }
+                    }}
+                    onReject={handleReject}
+                    isExecuting={isExecuting}
                   />
-                  {index < timelineItems.length - 1 && <div className="w-px h-8 bg-white/10"></div>}
+                ) : (
+                  <div className="bg-[#111] border border-white/10 rounded-[32px] p-8 relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-volt to-transparent opacity-50" />
+
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-start">
+                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+                          <span className="material-symbols-outlined text-white/80">
+                            {activeTask.intent_type === 'email' ? 'mail' :
+                              activeTask.intent_type === 'whatsapp' ? 'chat' : 'radio_button_checked'}
+                          </span>
+                        </div>
+                        <div className="px-3 py-1 rounded-full bg-volt/10 border border-volt/20 text-volt text-xs font-bold uppercase tracking-wider">
+                          {t('dueSoon')}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h2 className="text-2xl font-bold font-space leading-tight mb-2 text-white/90">
+                          {activeTask.title}
+                        </h2>
+                        <p className="text-white/50 text-base leading-relaxed">
+                          {activeTask.ai_reason}
+                        </p>
+                      </div>
+
+                      <div className="pt-4 flex gap-3">
+                        <button
+                          onClick={handleExecute}
+                          disabled={isExecuting}
+                          className="flex-1 bg-volt text-black h-14 rounded-2xl font-bold font-space text-lg tracking-wide hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-[0_0_20px_rgba(217,253,0,0.1)] disabled:opacity-50"
+                        >
+                          {isExecuting ? t('executing') : t('execute')}
+                        </button>
+
+                        <div className="w-full text-center mt-2">
+                          <span className="text-white/20 text-[10px] uppercase tracking-widest">{t('whenYoureReady')}</span>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSnooze(60)}
+                            className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white transition-colors"
+                          >
+                            <span className="material-symbols-outlined">update</span>
+                          </button>
+
+                          <button
+                            onClick={handleReject}
+                            className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                          >
+                            <span className="material-symbols-outlined">close</span>
+                          </button>
+
+                          <Drawer>
+                            <DrawerTrigger asChild>
+                              <button className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white transition-colors">
+                                <span className="material-symbols-outlined">tune</span>
+                              </button>
+                            </DrawerTrigger>
+                            <DrawerContent className="bg-[#111] border-t border-white/10 text-white">
+                              <DrawerHeader>
+                                <DrawerTitle>Adjust Task</DrawerTitle>
+                              </DrawerHeader>
+                              <div className="p-4 space-y-4">
+                                <p className="text-sm text-white/50">{t('rescheduleFor')}</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                  <button onClick={() => handleSnooze(180)} className="p-3 bg-white/5 rounded-xl border border-white/10 text-sm hover:bg-white/10">{t('plus3Hours')}</button>
+                                  <button onClick={() => handleSnooze(24 * 60)} className="p-3 bg-white/5 rounded-xl border border-white/10 text-sm hover:bg-white/10">{t('tomorrow')}</button>
+                                  <button onClick={() => handleSnooze(48 * 60)} className="p-3 bg-white/5 rounded-xl border border-white/10 text-sm hover:bg-white/10">{t('twoDays')}</button>
+                                </div>
+                              </div>
+                              <DrawerFooter>
+                                <DrawerClose asChild>
+                                  <button className="w-full py-3 bg-white/5 rounded-xl text-sm font-bold">{t('cancel')}</button>
+                                </DrawerClose>
+                              </DrawerFooter>
+                            </DrawerContent>
+                          </Drawer>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-transparent w-full text-center flex flex-col items-center justify-center gap-6 min-h-[300px]"
+              >
+                {/* Pulse Mic */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-volt/5 rounded-full animate-ping opacity-20" />
+                  <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md relative z-10 shadow-[0_0_40px_rgba(255,255,255,0.05)]">
+                    <span className="material-symbols-outlined text-white/40 text-3xl">check_circle</span>
+                  </div>
                 </div>
-              ))}
-           </div>
-           
-           {/* Achievements Line */}
-           <div className="mt-4 text-center">
-             <p className="text-[10px] text-white/20 font-space uppercase tracking-[0.2em]">
-               3 actions handled today
-             </p>
-           </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-xl font-medium font-space text-white/80 tracking-tight">
+                    {inboxCount > 0 ? t('inboxWaiting') :
+                      todayTasks.length > 0 ? t('tasksPending') :
+                        t('allClear')}
+                  </h2>
+                  <p className="text-white/30 text-xs tracking-widest uppercase font-mono">
+                    {inboxCount > 0 ? t('inboxWaitingDesc') :
+                      todayTasks.length > 0 ? t('tasksPendingDesc') :
+                        t('allClearDesc')}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => router.push('/voice')}
+                  className="text-white/20 text-xs hover:text-white/60 transition-colors mt-4 flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[14px]">mic</span>
+                  {t('tapToSpeak')}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-      </main>
+        {/* 3. Value Expansion: Progress & Upcoming */}
+        {!activeTask && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="w-full grid grid-cols-2 gap-4"
+          >
+            {/* Progress Card */}
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+              <span className="text-volt font-bold font-mono text-2xl">{stats.completedToday}</span>
+              <span className="text-white/30 text-xs font-mono uppercase tracking-wider mt-1">{t('completedToday')}</span>
+            </div>
 
-      <BottomNav />
-    </div>
-  );
-}
+            {/* Up Next Card */}
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex flex-col justify-center text-left relative overflow-hidden">
+              <span className="text-white/30 text-[10px] font-mono uppercase tracking-wider mb-1">{t('upNext')}</span>
+              {stats.upNext ? (
+                <>
+                  <p className="text-white/80 font-bold text-sm truncate leading-tight">{stats.upNext.title}</p>
+                  <p className="text-white/40 text-xs mt-1">
+                    {stats.upNext.due_date ? format(new Date(stats.upNext.due_date), 'h:mm a') : t('tomorrow')}
+                  </p>
+                </>
+              ) : (
+                <p className="text-white/40 text-xs italic">{t('nothingScheduled')}</p>
+              )}
+            </div>
+          </motion.div>
+        )}
 
-function TimelineItem({ icon, label, status }: { icon: string; label: string; status: 'past' | 'current' | 'future' }) {
-  const isCurrent = status === 'current';
-  const isPast = status === 'past';
-  
-  return (
-    <div className={`flex flex-col items-center gap-1 ${status === 'future' ? 'opacity-30' : ''}`}>
-      <span className={`material-symbols-outlined text-[16px] ${isCurrent ? 'text-volt animate-pulse' : isPast ? 'text-white' : 'text-white/50'}`}>
-        {icon}
-      </span>
-      <span className="text-[9px] text-white/60 font-medium tracking-wide uppercase max-w-[80px] text-center truncate">
-        {label}
-      </span>
-    </div>
+        {/* Calendar Strip (Optional / Minimized) */}
+        <div className="w-full pt-4 border-t border-white/5">
+          <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none">
+            {[...todayTasks, ...tomorrowTasks].slice(0, 5).map((t, i) => (
+              <div key={i} className="flex-shrink-0 w-24 p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1">
+                <div className="text-[10px] text-white/40 font-mono">
+                  {t.due_date ? format(new Date(t.due_date), 'h:mm a') : 'Anytime'}
+                </div>
+                <div className="text-xs font-bold truncate text-white/80">
+                  {t.title}
+                </div>
+              </div>
+            ))}
+            {todayTasks.length + tomorrowTasks.length === 0 && (
+              <div className="text-center w-full text-white/20 text-xs py-2">
+                {t('fullScheduleEmpty')}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* How It Works Guide */}
+      <HowRomnaWorks open={showHowItWorks} onOpenChange={setShowHowItWorks} />
+
+      <div className="absolute bottom-24 w-full text-center pointer-events-none opacity-30">
+        <p className="text-[10px] font-space tracking-[0.3em] uppercase text-white/50">{t('philosophy')}</p>
+      </div>
+
+    </main >
   );
 }

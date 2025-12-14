@@ -10,7 +10,7 @@ import {
 } from './types';
 
 export class ExecutionService {
-  constructor(private supabase: SupabaseClient) {}
+  constructor(private supabase: SupabaseClient) { }
 
   /**
    * Create an execution plan
@@ -84,9 +84,24 @@ export class ExecutionService {
 
   /**
    * Approve a plan (moves from waiting_approval → scheduled → enqueued)
+   * Optional: update payload before approving (e.g. edited email body)
    */
-  async approvePlan(planId: string, userId: string): Promise<boolean> {
+  async approvePlan(planId: string, userId: string, updatedPayload?: any): Promise<boolean> {
     try {
+      // If payload provided, update first
+      if (updatedPayload) {
+        const { error: updateError } = await this.supabase
+          .from('execution_plans')
+          .update({ payload: updatedPayload })
+          .eq('id', planId)
+          .eq('user_id', userId);
+
+        if (updateError) {
+          console.error('[ExecutionService] Failed to update payload on approve:', updateError);
+          return false;
+        }
+      }
+
       // Get the plan
       const { data: plan, error: fetchError } = await this.supabase
         .from('execution_plans')
@@ -125,6 +140,20 @@ export class ExecutionService {
         payload: plan.payload,
       });
 
+      if (queueItem) {
+        // Log Approval
+        await this.logEvent(planId, userId, 'APPROVED');
+
+        // Update plan with approved_at
+        await this.supabase
+          .from('execution_plans')
+          .update({
+            status: 'scheduled',
+            approved_at: new Date().toISOString()
+          })
+          .eq('id', planId);
+      }
+
       return queueItem !== null;
     } catch (err) {
       console.error('[ExecutionService] approvePlan error:', err);
@@ -147,6 +176,8 @@ export class ExecutionService {
         console.error('[ExecutionService] Failed to cancel plan:', error);
         return false;
       }
+
+      await this.logEvent(planId, userId, 'CANCELLED');
 
       // Cancel any queued executions
       await this.supabase
@@ -176,14 +207,24 @@ export class ExecutionService {
         last_error: error || null,
       };
 
-      const { error: updateError } = await this.supabase
+      const { data: queueItem, error: updateError } = await this.supabase
         .from('execution_queue')
         .update(updateData)
-        .eq('id', queueId);
+        .eq('id', queueId)
+        .select('execution_plan_id, user_id')
+        .single();
 
       if (updateError) {
         console.error('[ExecutionService] Failed to update execution status:', updateError);
         return false;
+      }
+
+      if (queueItem) {
+        if (status === 'executed') {
+          await this.logEvent(queueItem.execution_plan_id, queueItem.user_id, 'EXECUTED');
+        } else if (status === 'failed') {
+          await this.logEvent(queueItem.execution_plan_id, queueItem.user_id, 'FAILED', { error });
+        }
       }
 
       return true;
@@ -246,6 +287,7 @@ export class ExecutionService {
 
   /**
    * Increment retry count
+   * Alias: attempts
    */
   async incrementRetry(queueId: string): Promise<boolean> {
     try {
@@ -263,7 +305,7 @@ export class ExecutionService {
 
       const { error: updateError } = await this.supabase
         .from('execution_queue')
-        .update({ 
+        .update({
           retry_count: newRetryCount,
           status: newRetryCount >= 3 ? 'failed' : 'scheduled',
         })
@@ -275,4 +317,21 @@ export class ExecutionService {
       return false;
     }
   }
+
+  /**
+   * Log execution event (Audit Trail)
+   */
+  private async logEvent(planId: string, userId: string, type: string, metadata: object = {}) {
+    try {
+      await this.supabase.from('execution_events').insert({
+        execution_plan_id: planId,
+        user_id: userId,
+        event_type: type,
+        metadata,
+      });
+    } catch (e) {
+      console.warn('[ExecutionService] Failed to log event:', e);
+    }
+  }
 }
+

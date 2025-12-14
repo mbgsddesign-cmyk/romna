@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { StorageAdapter } from '@/lib/storage-adapter';
 
 interface ActiveTask {
   id: string;
@@ -36,17 +37,18 @@ interface AutoGLMDecisionContextValue {
 const AutoGLMDecisionContext = createContext<AutoGLMDecisionContextValue | undefined>(undefined);
 
 export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, userId, isLocal } = useAuth();
   const [decision, setDecision] = useState<DayDecision | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
   const hasFetchedRef = useRef(false);
-  
-  const userId = useMemo(() => user?.id, [user?.id]);
+
+  // Memoize userId to prevent unnecessary re-fetches
+  const activeUserId = useMemo(() => userId, [userId]);
 
   const fetchDecision = useCallback(async () => {
-    if (!userId) {
+    if (!activeUserId) {
       setLoading(false);
       setStatus('empty');
       hasFetchedRef.current = true;
@@ -57,11 +59,63 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
     setStatus('loading');
     setError(null);
 
+    // Support Local User - Client Side "AI" Decision
+    if (isLocal) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const nowStr = new Date().toISOString();
+
+        // Fetch local tasks due today or overdue
+        const tasks = await StorageAdapter.getTasks(activeUserId, true);
+        const activeOrPending = tasks.filter(t =>
+          (t.status === 'active' || t.status === 'pending') &&
+          (!t.due_date || t.due_date <= nowStr || t.due_date.startsWith(today))
+        );
+
+        if (activeOrPending.length > 0) {
+          // Simple heuristic: First high priority, or first due, or just first
+          const topTask = activeOrPending.sort((a, b) => {
+            const pA = a.priority === 'high' ? 2 : a.priority === 'medium' ? 1 : 0;
+            const pB = b.priority === 'high' ? 2 : b.priority === 'medium' ? 1 : 0;
+            return pB - pA;
+          })[0];
+
+          const localDecision: DayDecision = {
+            active_task: {
+              id: topTask.id,
+              title: topTask.title,
+              state: 'active',
+              ai_priority: topTask.priority === 'high' ? 90 : 50,
+              ai_reason: topTask.description || "This is your highest priority task right now.",
+              due_date: topTask.due_date
+            },
+            active_task_reason: "Prioritized based on schedule.",
+            next_actions: [],
+            recommendations: [],
+            primary_action: 'execute'
+          };
+          setDecision(localDecision);
+          setStatus('ready');
+        } else {
+          setDecision(null);
+          setStatus('empty');
+        }
+      } catch (err) {
+        console.error("Local decision error", err);
+        setStatus('error');
+      } finally {
+        setLoading(false);
+        hasFetchedRef.current = true;
+      }
+      return;
+    }
+
+    // Remote User - Server AI Decision
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`/api/autoglm/orchestrate?userId=${userId}`, {
+      const response = await fetch(`/api/autoglm/orchestrate?userId=${activeUserId}`, {
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -95,13 +149,15 @@ export function AutoGLMDecisionProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       hasFetchedRef.current = true;
     }
-  }, [userId]);
+  }, [activeUserId, isLocal]);
 
   useEffect(() => {
-    if (!hasFetchedRef.current && userId) {
+    // Reset fetch state if user changes
+    hasFetchedRef.current = false;
+    if (activeUserId) {
       fetchDecision();
     }
-  }, [fetchDecision, userId]);
+  }, [activeUserId, fetchDecision]);
 
   const refetch = useCallback(async () => {
     hasFetchedRef.current = false;

@@ -6,20 +6,15 @@ import { detectMeetingConflicts } from '@/services/notification-intelligence.ser
 export async function POST(req: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
-    
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
-    const conflicts = await detectMeetingConflicts(user.id);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    return NextResponse.json({ success: true, conflicts });
-  } catch (error: any) {
-    console.error('Detect conflicts error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to detect conflicts' },
-      { status: 500 }
-    );
+    const body = await req.json();
+    const conflicts = await detectMeetingConflicts(user.id, body);
+
+    return NextResponse.json(conflicts);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to detect conflicts' }, { status: 500 });
   }
 }

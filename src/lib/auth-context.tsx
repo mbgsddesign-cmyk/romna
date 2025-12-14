@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { ProfileWithSubscription, UsageTracking, PlanLimits, UserIntegration } from './database.types';
+import { LocalStorage, LocalUser } from './local-storage';
 
 export interface Profile {
   id: string;
@@ -19,7 +20,10 @@ export interface Profile {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: User | null; // Supabase user
+  localUser: LocalUser | null; // Local-only user
+  userId: string | null; // Unified ID (Supabase OR Local)
+  isLocal: boolean;
   profile: ProfileWithSubscription | null;
   session: Session | null;
   loading: boolean;
@@ -37,11 +41,18 @@ const MAX_LOADING_TIME = 8000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [localUser, setLocalUser] = useState<LocalUser | null>(null);
   const [profile, setProfile] = useState<ProfileWithSubscription | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fetchingRef = useRef(false);
+
+  // Initialize Local User immediately
+  useEffect(() => {
+    const lUser = LocalStorage.initUser();
+    setLocalUser(lUser);
+  }, []);
 
   const getCurrentMonthYear = () => {
     const now = new Date();
@@ -52,10 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      
+
       const response = await fetch('/api/auth/repair', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -70,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
-      
+
       if (data.success && data.profile) {
         let planLimits: PlanLimits | null = null;
         if (data.subscription) {
@@ -135,21 +146,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const integrationsData = integrationsResult.status === 'fulfilled' ? integrationsResult.value.data : [];
 
       if (!usageData) {
-        const { data: newUsage } = await supabase
-          .from('usage_tracking')
-          .insert({
-            user_id: userId,
-            month_year: getCurrentMonthYear(),
-            ai_tokens_used: 0,
-            voice_minutes_used: 0,
-            whatsapp_messages_sent: 0,
-            emails_sent: 0,
-          })
-          .select()
-          .single()
-          .then(result => result)
-          .catch(() => ({ data: null }));
-        usageData = newUsage;
+        // Optimistic usage creation
+        usageData = {
+          user_id: userId,
+          month_year: getCurrentMonthYear(),
+          ai_tokens_used: 0,
+          voice_minutes_used: 0,
+          whatsapp_messages_sent: 0,
+          emails_sent: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
       }
 
       let planLimitsData: PlanLimits | null = null;
@@ -178,8 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('profiles')
         .update({ last_active_at: new Date().toISOString() })
         .eq('id', userId)
-        .then(() => {})
-        .catch(() => {});
+        .then(() => { })
+        .catch(() => { });
 
       return fullProfile;
     } catch (error) {
@@ -193,8 +200,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (user && session) {
       await fetchProfile(user.id, user.email, session.access_token);
+    } else if (localUser) {
+      // Refresh local profile logic if needed
+      const lUser = LocalStorage.getUser();
+      setLocalUser(lUser);
+
+      // Robust Mock Profile with Strict Types
+      const mockUsage: UsageTracking = {
+        id: 'local-usage-id', // Added ID
+        user_id: lUser?.id || '',
+        month_year: getCurrentMonthYear(),
+        ai_tokens_used: 0,
+        voice_minutes_used: 0,
+        whatsapp_messages_sent: 0,
+        emails_sent: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const mockLimits: PlanLimits = {
+        id: 'free_limits',
+        plan: 'free',
+        monthly_ai_tokens: 1000,
+        monthly_voice_minutes: 60,
+        monthly_whatsapp_messages: 5,
+        monthly_emails: 5,
+        max_integrations: 0,       // Added
+        max_email_accounts: 0,     // Added
+        features: [],              // Added
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString() // Added
+      };
+
+      setProfile({
+        id: lUser?.id || '',
+        name: lUser?.name || 'Commander',
+        email: 'local@device',
+        role: 'USER', // Fixed Case
+        status: 'active',
+        avatar_url: null,
+        last_active_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        onboarding_completed: lUser?.onboarding_completed || false,
+        subscription: {
+          id: 'local-sub-id', // Added
+          plan: 'free',
+          status: 'active',
+          user_id: lUser?.id || '',
+          current_period_start: new Date().toISOString(), // Added
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Added
+          trial_ends_at: null, // Added
+          cancel_at: null,
+          canceled_at: null,
+          ended_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          metadata: {}
+        },
+        integrations: [],
+        usageTracking: mockUsage,
+        planLimits: mockLimits
+      });
     }
-  }, [user, session, fetchProfile]);
+  }, [user, session, fetchProfile, localUser]);
 
   useEffect(() => {
     loadingTimeoutRef.current = setTimeout(() => {
@@ -209,9 +278,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           await fetchProfile(session.user.id, session.user.email, session.access_token);
+        } else {
+          // Fallback to local profile
+          refreshProfile();
         }
       } catch (error) {
         console.error('Session error:', error);
@@ -228,11 +300,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         await fetchProfile(session.user.id, session.user.email, session.access_token);
       } else {
-        setProfile(null);
+        // Fallback to Local Profile on logout
+        refreshProfile();
       }
       setLoading(false);
     });
@@ -243,7 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [fetchProfile]);
+  }, [fetchProfile, refreshProfile]); // Added refreshProfile dependency
 
   const signUp = async (email: string, password: string, name: string) => {
     const { data, error } = await supabase.auth.signUp({
@@ -320,7 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     }
     await supabase.auth.signOut();
-    setProfile(null);
+    setProfile(null); // Will trigger refreshProfile via auth state change to load local
   };
 
   const resetPassword = async (email: string) => {
@@ -336,6 +409,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        localUser,
+        userId: user?.id || localUser?.id || null, // Unified ID
+        isLocal: !user,
         profile,
         session,
         loading,

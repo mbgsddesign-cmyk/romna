@@ -233,3 +233,51 @@ export interface Event {
   created_at: string;
   updated_at: string;
 }
+
+export type EmailProvider = 'gmail' | 'resend';
+
+export interface EmailAccount {
+  id: string;
+  user_id: string;
+  provider: EmailProvider;
+  email_address: string;
+  display_name: string | null;
+  is_default: boolean;
+  credentials_encrypted: string; // [CHANGED] text
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WhatsAppAccount {
+  id: string;
+  user_id: string;
+  provider: string; // 'twilio'
+  display_name: string | null;
+  phone_number: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionPlan {
+  id: string;
+  user_id: string;
+  source: 'voice' | 'ai' | 'manual';
+  intent_type: string;
+  status: 'waiting_approval' | 'scheduled' | 'executed' | 'cancelled';
+  requires_approval: boolean;
+  approved_at?: string;
+  scheduled_for?: string;
+  payload: {
+    title: string;
+    subject?: string;
+    body?: string;
+    to?: string[] | string;
+    from_account_id?: string;
+    target?: string;
+    reason?: string;
+    [key: string]: any;
+  };
+  created_at: string;
+  skip_until?: string; // Ghost Card Snooze
+}

@@ -5,27 +5,45 @@
   --color-volt: #D9FD00;
   --color-volt-dim: rgba(217, 253, 0, 0.1);
   --color-volt-glow: rgba(217, 253, 0, 0.4);
-  --color-obsidian: rgba(20, 20, 20, 0.9); /* Darker, less transparent */
+  --color-obsidian: rgba(20, 20, 20, 0.9);
+  /* Darker, less transparent */
   --color-card-hover: rgba(30, 30, 30, 0.9);
-  
+
   --font-space: var(--font-space);
   --font-inter: var(--font-inter);
-  
+  --font-cairo: var(--font-cairo);
+
   --radius-hyper: 32px;
-  
-  /* MOTION REFINEMENT: Slower, ease-in-out only */
-  --animate-breathe: breathe 6s ease-in-out infinite;
-  --animate-float: float 8s ease-in-out infinite;
-  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  
+
+  /* MOTION REFINEMENT: Slower, ease-in-out only - Silent Commander Scale */
+  --animate-breathe: breathe 8s ease-in-out infinite;
+  --animate-float: float 10s ease-in-out infinite;
+  --animate-pulse-slow: pulse 5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
   @keyframes breathe {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(0.98); opacity: 0.95; }
+
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    50% {
+      transform: scale(0.98);
+      opacity: 0.95;
+    }
   }
-  
+
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-6px);
+    }
   }
 }
 
@@ -44,14 +62,34 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-space), sans-serif;
+}
+
+/* RTL / Arabic Overrides */
+html[lang="ar"] body {
+  font-family: var(--font-cairo), sans-serif;
+}
+
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3,
+html[lang="ar"] h4,
+html[lang="ar"] h5,
+html[lang="ar"] h6 {
+  font-family: var(--font-cairo), sans-serif;
 }
 
 /* UTILITIES */
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -71,16 +109,16 @@ h1, h2, h3, h4, h5, h6 {
 /* MATERIAL SYMBOLS */
 .material-symbols-outlined {
   font-variation-settings:
-  'FILL' 0,
-  'wght' 300,
-  'GRAD' 0,
-  'opsz' 24
+    'FILL' 0,
+    'wght' 300,
+    'GRAD' 0,
+    'opsz' 24
 }
 
 .material-symbols-outlined-fill {
   font-variation-settings:
-  'FILL' 1,
-  'wght' 300,
-  'GRAD' 0,
-  'opsz' 24
+    'FILL' 1,
+    'wght' 300,
+    'GRAD' 0,
+    'opsz' 24
 }

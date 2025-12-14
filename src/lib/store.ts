@@ -78,21 +78,40 @@ interface AppState {
   emailAccounts: EmailAccount[];
   integrations: Integration[];
   voiceIntents: VoiceIntent[];
-  
+  refreshTick: number; // Global signal for data refetch
+
+  feedback: {
+    soundEnabled: boolean;
+    hapticsEnabled: boolean;
+    backgroundNotifications: boolean;
+    backgroundSound: boolean;
+    backgroundVibration: boolean;
+    autoExecutionEnabled: boolean;
+  };
+
   setLocale: (locale: Locale) => void;
   setTheme: (theme: Theme) => void;
-  
+  triggerRefresh: () => void; // Call this to signal all pages to refetch
+  setFeedback: (feedback: Partial<{
+    soundEnabled: boolean;
+    hapticsEnabled: boolean;
+    backgroundNotifications: boolean;
+    backgroundSound: boolean;
+    backgroundVibration: boolean;
+    autoExecutionEnabled: boolean;
+  }>) => void;
+
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   toggleTaskStatus: (id: string) => void;
-  
+
   addEvent: (event: Omit<Event, 'id' | 'createdAt'>) => void;
   updateEvent: (id: string, updates: Partial<Event>) => void;
   deleteEvent: (id: string) => void;
-  
+
   addVoiceNote: (voiceNote: Omit<VoiceNote, 'id' | 'createdAt'>) => void;
-  
+
   addEmailAccount: (account: Omit<EmailAccount, 'id'>) => void;
   removeEmailAccount: (id: string) => void;
   setPrimaryEmail: (id: string) => void;
@@ -107,6 +126,7 @@ interface AppState {
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+let refreshTimeout: NodeJS.Timeout | null = null;
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -119,9 +139,32 @@ export const useAppStore = create<AppState>()(
       emailAccounts: [],
       integrations: [],
       voiceIntents: [],
+      refreshTick: 0,
+      feedback: {
+        soundEnabled: true,
+        hapticsEnabled: true,
+        backgroundNotifications: true,
+        backgroundSound: true,
+        backgroundVibration: true,
+        autoExecutionEnabled: false,
+      },
 
-      setLocale: (locale) => set({ locale }),
+      setLocale: (locale) => {
+        // [V6] Only set cookie - RTL is now handled server-side in layout.tsx
+        if (typeof document !== 'undefined') {
+          document.cookie = `romna_locale=${locale}; path=/; max-age=31536000; SameSite=Lax`;
+        }
+        set({ locale });
+      },
       setTheme: (theme) => set({ theme }),
+      triggerRefresh: () => {
+        if (refreshTimeout) clearTimeout(refreshTimeout);
+        refreshTimeout = setTimeout(() => {
+          console.log('[PULSE]', Date.now());
+          set((state) => ({ refreshTick: state.refreshTick + 1 }));
+        }, 100); // 100ms Debounce (Pulse)
+      },
+      setFeedback: (feedback) => set((state) => ({ feedback: { ...state.feedback, ...feedback } })),
 
       addTask: (task) =>
         set((state) => ({
@@ -205,9 +248,9 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           integrations: [
             ...state.integrations,
-            { 
-              ...integration, 
-              id: generateId(), 
+            {
+              ...integration,
+              id: generateId(),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             },
@@ -247,6 +290,20 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'romna-storage',
+
+      version: 5, // V5 Stabilization: Force clean slate for critical properties
+      migrate: (persistedState: any, version: number) => {
+        if (version < 5) {
+          // Reset critical state to defaults
+          return {
+            ...persistedState,
+            tasks: [], // Clear local tasks
+            voiceIntents: [], // Clear history
+            refreshTick: 0
+          };
+        }
+        return persistedState;
+      },
     }
   )
 );

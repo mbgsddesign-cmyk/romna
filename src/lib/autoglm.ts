@@ -1,15 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { createHash } from 'crypto';
-import { 
-  UserPreferences, 
-  Task, 
-  Event, 
-  VoiceNote, 
-  Insight, 
-  Notification, 
-  UserActivity, 
-  AISession 
+import {
+  UserPreferences,
+  Task,
+  Event,
+  VoiceNote,
+  Insight,
+  Notification,
+  UserActivity,
+  AISession
 } from '@/lib/database.types';
 import { NotificationDispatcher } from '@/lib/notification-dispatcher';
 
@@ -17,10 +17,12 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use service role for backend operations
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const AUTOGLM_SYSTEM_PROMPT = `
 🧠 AUTOGLM SYSTEM PROMPT — ROMNA
@@ -310,7 +312,7 @@ export class AutoGLM {
     // 3. Rate Limiting (Free Tier)
     if (userPrefs.plan_tier === 'free') {
       const today = new Date();
-      today.setHours(0,0,0,0);
+      today.setHours(0, 0, 0, 0);
       const { count } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
@@ -329,8 +331,8 @@ export class AutoGLM {
 
     // 4. Fetch Data Context
     const today = new Date();
-    const startOfDay = new Date(today.setHours(0,0,0,0)).toISOString();
-    const endOfDay = new Date(today.setHours(23,59,59,999)).toISOString();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
     const [tasks, events, insights, voiceNotes] = await Promise.all([
       supabase.from('tasks').select('*').eq('user_id', userId).eq('status', 'pending').limit(20),
@@ -354,7 +356,7 @@ export class AutoGLM {
     // FIX: Remove volatile timestamps. Use stable hourly bucket for deduplication.
     // This ensures identical data states generate the same hash within the same hour.
     const timeBucket = new Date().toISOString().slice(0, 13); // e.g. "2025-12-12T10"
-    
+
     const hashableContext = {
       ...dataContext,
       current_time: timeBucket
@@ -373,8 +375,8 @@ export class AutoGLM {
       .single();
 
     if (existingSession) {
-       console.log(`[AutoGLM] Duplicate context detected for user ${userId}. Skipping.`);
-       return { success: false, reason: 'duplicate_context' };
+      console.log(`[AutoGLM] Duplicate context detected for user ${userId}. Skipping.`);
+      return { success: false, reason: 'duplicate_context' };
     }
 
     // 6. Call OpenAI
@@ -399,7 +401,7 @@ export class AutoGLM {
       if (result.insight) {
         // Double check duplication rule "Similar insight was not generated in last 48h"
         // (This is partially handled by context hash, but let's trust the AI or add explicit check if needed)
-        await supabase.from('insights').insert({
+        await getSupabaseAdmin().from('insights').insert({
           user_id: userId,
           type: result.insight.type,
           title: result.insight.payload?.summary || 'New Insight', // Map fields
@@ -416,55 +418,55 @@ export class AutoGLM {
       let actionStatus: 'pending' | 'blocked_pro' | 'none' = 'none';
 
       if (result.action_candidate && result.action_candidate.confidence >= 0.8) {
-         const actionType = result.action_candidate.type;
-         const requiredTier = ACTION_TIERS[actionType] || 'pro'; // Default to pro for safety
-         const userTier = userPrefs.plan_tier || 'free';
-         
-         const isAllowed = userTier === 'enterprise' || 
-                          (userTier === 'pro') || 
-                          (requiredTier === 'free');
+        const actionType = result.action_candidate.type;
+        const requiredTier = ACTION_TIERS[actionType] || 'pro'; // Default to pro for safety
+        const userTier = userPrefs.plan_tier || 'free';
 
-         if (isAllowed) {
-             const payloadString = JSON.stringify(result.action_candidate.payload);
-             actionHash = createHash('md5').update(payloadString + Date.now().toString()).digest('hex'); // Unique hash for this instance
-  
-             await supabase.from('user_activity').insert({
-               user_id: userId,
-               action: 'action_proposed',
-               meta: {
-                 ...result.action_candidate,
-                 status: 'pending',
-                 action_hash: actionHash,
-                 created_at: new Date().toISOString()
-               }
-             });
-             
-             actionStatus = 'pending';
-             console.log(`[AutoGLM] Action proposed: ${actionType} (${actionHash})`);
-         } else {
-             // Blocked by Pro Matrix
-             actionStatus = 'blocked_pro';
-             
-             await supabase.from('user_activity').insert({
-                 user_id: userId,
-                 action: 'pro_blocked_action',
-                 meta: {
-                     attempted_action: actionType,
-                     required_tier: requiredTier,
-                     user_tier: userTier,
-                     confidence: result.action_candidate.confidence,
-                     created_at: new Date().toISOString()
-                 }
-             });
+        const isAllowed = userTier === 'enterprise' ||
+          (userTier === 'pro') ||
+          (requiredTier === 'free');
 
-             console.log(`[AutoGLM] Action blocked (Pro only): ${actionType} for user ${userId}`);
-         }
+        if (isAllowed) {
+          const payloadString = JSON.stringify(result.action_candidate.payload);
+          actionHash = createHash('md5').update(payloadString + Date.now().toString()).digest('hex'); // Unique hash for this instance
+
+          await getSupabaseAdmin().from('user_activity').insert({
+            user_id: userId,
+            action: 'action_proposed',
+            meta: {
+              ...result.action_candidate,
+              status: 'pending',
+              action_hash: actionHash,
+              created_at: new Date().toISOString()
+            }
+          });
+
+          actionStatus = 'pending';
+          console.log(`[AutoGLM] Action proposed: ${actionType} (${actionHash})`);
+        } else {
+          // Blocked by Pro Matrix
+          actionStatus = 'blocked_pro';
+
+          await getSupabaseAdmin().from('user_activity').insert({
+            user_id: userId,
+            action: 'pro_blocked_action',
+            meta: {
+              attempted_action: actionType,
+              required_tier: requiredTier,
+              user_tier: userTier,
+              confidence: result.action_candidate.confidence,
+              created_at: new Date().toISOString()
+            }
+          });
+
+          console.log(`[AutoGLM] Action blocked (Pro only): ${actionType} for user ${userId}`);
+        }
       }
 
       // 7.3 Notification
       if (result.notification) {
         const dispatcher = new NotificationDispatcher(supabase);
-        
+
         // If action was blocked, we strip the action URL but keep the insight
         const isActionBlocked = actionStatus === 'blocked_pro';
 
@@ -480,7 +482,7 @@ export class AutoGLM {
             // Point to frontend verification page, not direct API execution
             action_url: actionHash ? `/actions/verify/${actionHash}` : null,
             action_label: actionHash ? 'Confirm Action' : null,
-            metadata: { 
+            metadata: {
               trigger,
               pro_eligible: result.notification.pro_eligible || isActionBlocked || false,
               action_hash: actionHash,
@@ -493,7 +495,7 @@ export class AutoGLM {
 
       // 7.4 Log Activity
       if (result.log) {
-        await supabase.from('user_activity').insert({
+        await getSupabaseAdmin().from('user_activity').insert({
           user_id: userId,
           action: result.log.action,
           meta: result.log.meta
@@ -501,7 +503,7 @@ export class AutoGLM {
       }
 
       // 8. Save Session
-      await supabase.from('ai_sessions').insert({
+      await getSupabaseAdmin().from('ai_sessions').insert({
         user_id: userId,
         context_hash: contextHash,
         model: 'gpt-4o',

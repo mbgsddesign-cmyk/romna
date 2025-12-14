@@ -10,10 +10,12 @@ import {
   ToolContext,
 } from './tools';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // Use DashScope (Qwen) as configured in env
 const openai = new OpenAI({
@@ -78,7 +80,7 @@ export interface AutoGLMOutput {
  */
 export async function runAutoGLM(input: AutoGLMInput): Promise<AutoGLMOutput> {
   const startTime = Date.now();
-  
+
   // Create run record
   const { data: run } = await supabase
     .from('autoglm_runs')
@@ -97,7 +99,7 @@ export async function runAutoGLM(input: AutoGLMInput): Promise<AutoGLMOutput> {
   try {
     // Fetch user context
     const userContext = await fetchUserContext(input.user_id);
-    
+
     // Stage 1: Deterministic Planning (always runs)
     const deterministicPlan = await generateDeterministicPlan(
       userContext,
@@ -113,7 +115,7 @@ export async function runAutoGLM(input: AutoGLMInput): Promise<AutoGLMOutput> {
 
     // Stage 2: LLM Refinement (only if opted-in)
     const aiOptIn = input.context?.ai_opt_in ?? userContext.preferences?.ai_opt_in ?? false;
-    
+
     if (aiOptIn) {
       const refinedOutput = await refinePlanWithLLM(
         deterministicPlan,
@@ -248,8 +250,8 @@ async function generateDeterministicPlan(
   const totalTaskMinutes = scoredTasks
     .filter((t: any) => t.score >= 50)
     .reduce((sum: number, t: any) => sum + (t.estimated_minutes || 30), 0);
-  
-  const availableMinutes = 
+
+  const availableMinutes =
     (parseInt(workingHours.end.split(':')[0]) - parseInt(workingHours.start.split(':')[0])) * 60 -
     events.reduce((sum: number, e: any) => {
       const duration = (new Date(e.end_time).getTime() - new Date(e.start_time).getTime()) / 60000;

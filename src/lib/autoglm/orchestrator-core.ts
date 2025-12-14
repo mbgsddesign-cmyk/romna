@@ -12,10 +12,12 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const openai = new OpenAI({
   baseURL: process.env.DASHSCOPE_BASE_URL,
@@ -77,7 +79,7 @@ export async function runDayOrchestrator(context: AutoGLMContext): Promise<DayDe
   const today = new Date();
   const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
   const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-  
+
   const { data: events } = await supabase
     .from('events')
     .select('*')
@@ -114,7 +116,7 @@ async function selectActiveTask(
 
   // Check if any task is already active
   const currentActive = scoredTasks.find(t => t.state === 'active');
-  
+
   // If active task exists and is still valid, keep it
   if (currentActive && currentActive.ai_priority >= 3) {
     return {
@@ -240,7 +242,7 @@ function buildRecommendations(tasks: any[], events: any[], context: AutoGLMConte
   }
 
   // Check for overdue tasks
-  const overdueCount = tasks.filter(t => 
+  const overdueCount = tasks.filter(t =>
     t.due_date && new Date(t.due_date) < context.current_time
   ).length;
   if (overdueCount > 0) {
@@ -291,7 +293,7 @@ async function applyTaskStateUpdates(decision: DayDecision, userId: string) {
  * Log decision to autoglm_runs for observability
  */
 async function logDecision(context: AutoGLMContext, decision: DayDecision) {
-  await supabase.from('autoglm_runs').insert({
+  await getSupabaseAdmin().from('autoglm_runs').insert({
     user_id: context.user_id,
     trigger: context.trigger,
     started_at: context.current_time.toISOString(),
@@ -331,7 +333,7 @@ export async function handleROMNAOverride(
       if (!activeTask) {
         return { success: false, message: 'No active task to skip' };
       }
-      
+
       // Set active task to pending, run orchestrator again
       await supabase
         .from('tasks')

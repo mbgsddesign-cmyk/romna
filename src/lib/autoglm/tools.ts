@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // Tool schemas for strict validation
 const CreateTaskSchema = z.object({
@@ -214,7 +216,7 @@ export async function createEvent(
   try {
     const validated = CreateEventSchema.parse(input);
 
-    const endTime = validated.end_time || 
+    const endTime = validated.end_time ||
       new Date(new Date(validated.start_time).getTime() + 60 * 60 * 1000).toISOString();
 
     const { data: event, error } = await supabase
@@ -270,7 +272,7 @@ export async function rescheduleEvent(
       return { success: false, error: 'Event not found' };
     }
 
-    const endTime = new_end_time || 
+    const endTime = new_end_time ||
       new Date(new Date(new_start_time).getTime() + 60 * 60 * 1000).toISOString();
 
     const { data: after, error } = await supabase

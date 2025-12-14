@@ -1,26 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  computeWorkflowDecision, 
-  detectEventConflicts, 
+import {
+  computeWorkflowDecision,
+  detectEventConflicts,
   flagUnrealisticDeadlines,
   groupTasksByWorkflowState,
-  type TaskWithWorkflow 
+  type TaskWithWorkflow
 } from '@/lib/ai-workflow-engine';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const revalidate = 30;
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const includeCompleted = searchParams.get('includeCompleted') === 'true';
-    
+
     if (!userId) {
       return NextResponse.json({ success: false, error: 'userId required' }, { status: 400 });
     }
@@ -31,7 +34,7 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    
+
     if (!includeCompleted) {
       query = query.neq('status', 'done');
     }
@@ -47,7 +50,7 @@ export async function GET(req: NextRequest) {
     const today = new Date();
     const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
     const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-    
+
     const { data: events } = await supabase
       .from('events')
       .select('*')
@@ -92,13 +95,13 @@ export async function GET(req: NextRequest) {
       auto_ready_count: grouped.auto_ready.length,
       conflicts_count: conflicts.length,
       unrealistic_count: unrealisticDeadlines.length,
-      overdue_count: tasksWithWorkflow.filter(t => 
+      overdue_count: tasksWithWorkflow.filter(t =>
         t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done'
       ).length,
     };
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       tasks: tasksWithWorkflow,
       grouped,
       insights,
@@ -112,9 +115,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const { taskId, updates } = await req.json();
-    
+
     if (!taskId) {
       return NextResponse.json({ success: false, error: 'taskId required' }, { status: 400 });
     }

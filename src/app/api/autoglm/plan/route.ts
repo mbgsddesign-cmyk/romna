@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 interface Task {
   id: string;
@@ -49,6 +51,7 @@ interface Conflict {
 export const revalidate = 60;
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const searchParams = req.nextUrl.searchParams;
     const userId = searchParams.get('userId');
@@ -201,9 +204,9 @@ function generateFocusBlocks(topTasks: Task[], events: Event[], isToday: boolean
 function detectConflicts(tasks: Task[], events: Event[]): Conflict[] {
   const conflicts: Conflict[] = [];
 
-  const overlappingEvents = events.filter((e1, i) => 
-    events.slice(i + 1).some(e2 => 
-      new Date(e1.start_time) < new Date(e2.end_time) && 
+  const overlappingEvents = events.filter((e1, i) =>
+    events.slice(i + 1).some(e2 =>
+      new Date(e1.start_time) < new Date(e2.end_time) &&
       new Date(e2.start_time) < new Date(e1.end_time)
     )
   );
@@ -216,7 +219,7 @@ function detectConflicts(tasks: Task[], events: Event[]): Conflict[] {
     });
   }
 
-  const overdueTasks = tasks.filter(t => 
+  const overdueTasks = tasks.filter(t =>
     t.due_date && new Date(t.due_date) < new Date() && t.status === 'pending'
   );
 

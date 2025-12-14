@@ -2,18 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleROMNAOverride, runDayOrchestrator } from '@/lib/autoglm/orchestrator-core';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const revalidate = 0;
+
 
 /**
  * POST /api/autoglm/action
  * Handles user actions on the active task (start, reschedule, skip)
  */
 export async function POST(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const { userId, action, taskId } = await req.json();
 
@@ -31,7 +35,7 @@ export async function POST(req: NextRequest) {
         if (!taskId) {
           return NextResponse.json({ error: 'taskId required for start action' }, { status: 400 });
         }
-        
+
         await supabase
           .from('tasks')
           .update({
@@ -51,10 +55,10 @@ export async function POST(req: NextRequest) {
         if (!taskId) {
           return NextResponse.json({ error: 'taskId required for reschedule action' }, { status: 400 });
         }
-        
+
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        
+
         await supabase
           .from('tasks')
           .update({

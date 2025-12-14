@@ -9,18 +9,22 @@ import {
   ToolContext,
 } from '@/lib/autoglm/tools';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const revalidate = 0;
+
 
 /**
  * GET /api/autoglm/suggestions?userId=xxx
  * Get pending suggestions for user
  */
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const userId = req.nextUrl.searchParams.get('userId');
 
@@ -61,6 +65,7 @@ export async function GET(req: NextRequest) {
  * }
  */
 export async function POST(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const { suggestion_id, action, user_id } = await req.json();
 

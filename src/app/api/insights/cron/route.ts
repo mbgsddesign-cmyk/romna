@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { AutoGLM } from '@/lib/autoglm';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
+
     const authHeader = req.headers.get('authorization');
-    
+
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -21,10 +25,10 @@ export async function GET(req: NextRequest) {
       // If profiles table doesn't have status, just get all IDs.
       // Checking database.types.ts... profiles usually exists.
       .select('id');
-      // .eq('status', 'active'); // Assuming active status column exists, if not remove or check schema.
-      // Let's assume just all users for now or check if there's a status.
-      // In previous step, I saw 'profiles' table.
-    
+    // .eq('status', 'active'); // Assuming active status column exists, if not remove or check schema.
+    // Let's assume just all users for now or check if there's a status.
+    // In previous step, I saw 'profiles' table.
+
     if (!users || users.length === 0) {
       return NextResponse.json({ success: true, message: 'No users found' });
     }
@@ -34,11 +38,11 @@ export async function GET(req: NextRequest) {
     );
 
     const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       processed: users.length,
-      successful: successCount 
+      successful: successCount
     });
   } catch (error: any) {
     console.error('Cron job error:', error);

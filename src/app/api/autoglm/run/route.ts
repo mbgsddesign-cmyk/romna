@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { runAutoGLM } from '@/lib/autoglm/orchestrator';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const revalidate = 0;
+
 
 /**
  * POST /api/autoglm/run
@@ -19,6 +22,7 @@ export const revalidate = 0;
  * }
  */
 export async function POST(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const { trigger, user_id } = await req.json();
 
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
       if (lastRun) {
         const hoursSinceLastRun =
           (Date.now() - new Date(lastRun.started_at).getTime()) / (1000 * 60 * 60);
-        
+
         if (hoursSinceLastRun < 6) {
           return NextResponse.json({
             success: true,
@@ -97,6 +101,7 @@ export async function POST(req: NextRequest) {
  * Get latest AutoGLM run results
  */
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
     const userId = req.nextUrl.searchParams.get('userId');
 

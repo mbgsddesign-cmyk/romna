@@ -1,13 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
+
     const { notificationId, userId } = await req.json();
 
     if (!userId) {
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const { error } = await supabase
       .from('notifications')
-      .update({ 
+      .update({
         is_read: true,
         read_at: new Date().toISOString()
       })

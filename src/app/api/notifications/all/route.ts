@@ -1,27 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export const revalidate = 30; // Revalidate every 30 seconds
 
 export async function GET(req: NextRequest) {
+  const supabase = getSupabaseAdmin();
   try {
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const category = searchParams.get('category');
     const limit = parseInt(searchParams.get('limit') || '50');
 
     if (!userId) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
-        error: 'userId is required' 
+        error: 'userId is required'
       }, { status: 400 });
     }
-    
+
     let query = supabase
       .from('notifications')
       .select('*')

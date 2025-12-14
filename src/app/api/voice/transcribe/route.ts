@@ -11,11 +11,13 @@ const MAX_DURATION_SECONDS = 15;
 // Maximum file size in bytes (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Initialize Supabase client for temp file storage
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Initialize Supabase client for temp file storage (lazy)
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 /**
  * Convert WebM/Opus audio to WAV PCM 16kHz mono format required by Fun-ASR
@@ -55,24 +57,25 @@ async function convertToWAV(inputBuffer: Buffer): Promise<{ buffer: Buffer; dura
 
     // Cleanup temp files
     await Promise.all([
-      unlink(tempInput).catch(() => {}),
-      unlink(tempOutput).catch(() => {}),
+      unlink(tempInput).catch(() => { }),
+      unlink(tempOutput).catch(() => { }),
     ]);
 
     return { buffer: wavBuffer, duration };
   } catch (error) {
     // Cleanup on error
     await Promise.all([
-      unlink(tempInput).catch(() => {}),
-      unlink(tempOutput).catch(() => {}),
+      unlink(tempInput).catch(() => { }),
+      unlink(tempOutput).catch(() => { }),
     ]);
     throw error;
   }
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = getSupabaseAdmin();
   let tempFilePath: string | null = null;
-  
+
   try {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as Blob;
@@ -114,15 +117,15 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Convert WebM/Opus to WAV PCM 16kHz mono
     const inputBuffer = Buffer.from(await audioFile.arrayBuffer());
-    
+
     let wavBuffer: Buffer;
     let audioDuration: number;
-    
+
     try {
       const converted = await convertToWAV(inputBuffer);
       wavBuffer = converted.buffer;
       audioDuration = converted.duration;
-      
+
       console.log('[Fun-ASR] Audio converted:', {
         originalSize: audioFile.size,
         wavSize: wavBuffer.length,
@@ -155,7 +158,7 @@ export async function POST(request: NextRequest) {
     // Step 2: Upload WAV to Supabase temp storage
     const filename = `voice-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`;
     tempFilePath = `temp-asr/${filename}`;
-    
+
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('voice-temp')
       .upload(tempFilePath, wavBuffer, {
@@ -175,9 +178,9 @@ export async function POST(request: NextRequest) {
     const { data: urlData } = supabase.storage
       .from('voice-temp')
       .getPublicUrl(tempFilePath);
-    
+
     const fileUrl = urlData.publicUrl;
-    
+
     console.log('[Fun-ASR] WAV uploaded, calling ASR with URL:', fileUrl);
 
     // Step 4: Call Fun-ASR async_call with file URL
@@ -211,10 +214,10 @@ export async function POST(request: NextRequest) {
         statusText: asrResponse.statusText,
         error: errorText,
       });
-      
+
       return NextResponse.json(
-        { 
-          error: 'Transcription failed', 
+        {
+          error: 'Transcription failed',
           details: errorText,
           provider: 'dashscope-fun-asr-intl'
         },
@@ -224,7 +227,7 @@ export async function POST(request: NextRequest) {
 
     const asrData = await asrResponse.json();
     const taskId = asrData.output?.task_id;
-    
+
     console.log('[Fun-ASR] Task submitted:', { task_id: taskId });
 
     if (!taskId) {
@@ -238,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 500)); // Poll every 500ms
-      
+
       const pollResponse = await fetch(
         `https://dashscope-intl.aliyuncs.com/api/v1/tasks/${taskId}`,
         {
@@ -252,29 +255,29 @@ export async function POST(request: NextRequest) {
       if (pollResponse.ok) {
         const pollData = await pollResponse.json();
         const taskStatus = pollData.output?.task_status;
-        
+
         console.log(`[Fun-ASR] Poll attempt ${attempts + 1}: ${taskStatus}`);
-        
+
         if (taskStatus === 'SUCCEEDED') {
           // 🔍 Log FULL response structure
           console.log('[Fun-ASR] ✅ SUCCEEDED - Full pollData:');
           console.log(JSON.stringify(pollData, null, 2));
-          
+
           const output = pollData.output || {};
-          
+
           // CANONICAL EXTRACTION: transcription_url → transcripts[0].text
           if (output.results && Array.isArray(output.results) && output.results[0]?.transcription_url) {
             const transcriptionUrl = output.results[0].transcription_url;
-            
+
             console.log('[Fun-ASR] Fetching transcript from:', transcriptionUrl);
-            
+
             try {
               const tRes = await fetch(transcriptionUrl);
               const tJson = await tRes.json();
-              
+
               console.log('[Fun-ASR] Transcription JSON:');
               console.log(JSON.stringify(tJson, null, 2));
-              
+
               // Extract from transcripts array
               if (Array.isArray(tJson.transcripts) && tJson.transcripts.length > 0) {
                 transcript = tJson.transcripts
@@ -282,16 +285,16 @@ export async function POST(request: NextRequest) {
                   .filter(Boolean)
                   .join(' ');
               }
-              
+
               // 🚨 UNIT-SAFE GUARD
               if (!transcript) {
                 // Cleanup before returning error
                 if (tempFilePath) {
                   await supabase.storage.from('voice-temp').remove([tempFilePath]);
                 }
-                
+
                 return NextResponse.json(
-                  { 
+                  {
                     error: 'SUCCEEDED but transcript empty',
                     debug_keys: Object.keys(tJson),
                     debug_transcripts: tJson.transcripts
@@ -299,7 +302,7 @@ export async function POST(request: NextRequest) {
                   { status: 500 }
                 );
               }
-              
+
               console.log('[Fun-ASR] Extracted transcript:', transcript);
             } catch (fetchError) {
               console.error('[Fun-ASR] Failed to fetch transcription_url:', fetchError);
@@ -310,9 +313,9 @@ export async function POST(request: NextRequest) {
             if (tempFilePath) {
               await supabase.storage.from('voice-temp').remove([tempFilePath]);
             }
-            
+
             return NextResponse.json(
-              { 
+              {
                 error: 'SUCCEEDED but transcription_url missing',
                 debug_output_keys: Object.keys(output),
                 debug_results: output.results
@@ -320,14 +323,14 @@ export async function POST(request: NextRequest) {
               { status: 500 }
             );
           }
-          
+
           break;
         } else if (taskStatus === 'FAILED') {
           console.error('[Fun-ASR] Task failed:', JSON.stringify(pollData, null, 2));
           throw new Error('Fun-ASR transcription task failed');
         }
       }
-      
+
       attempts++;
     }
 
@@ -345,25 +348,25 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[Fun-ASR] ✅ Success! Transcript:', transcript);
-    return NextResponse.json({ 
+    return NextResponse.json({
       transcript,
       provider: 'dashscope-fun-asr'
     });
 
   } catch (error) {
     console.error('[Fun-ASR] Transcription error:', error);
-    
+
     // Cleanup on error
     if (tempFilePath) {
       try {
         await supabase.storage.from('voice-temp').remove([tempFilePath]);
-      } catch {}
+      } catch { }
     }
-    
+
     return NextResponse.json(
-      { 
-        error: 'Internal server error', 
-        details: error instanceof Error ? error.message : 'Unknown error' 
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

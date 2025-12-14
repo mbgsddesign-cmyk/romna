@@ -55,21 +55,26 @@ async function parseIntentWithGemini(rawText: string): Promise<IntentResult> {
     Context:
     ${currentContext}
     
-    STRICT V4 INTENT SCHEMA:
+    STRICT V5 INTENT SCHEMA:
     intent: "task" | "reminder" | "approval" | "clarification" | "email" | "whatsapp"
 
-    MANDATORY ARABIC MAPPINGS:
-    - "واتساب" (WhatsApp) / "رسالة واتساب" -> intent: "whatsapp", action: "send"
-    - "أرسل واتساب" -> intent: "whatsapp"
-    - "ذكرني" (Remind me) -> intent: "reminder"
-    - "موعد" (Appointment) / "اجتماع" (Meeting) -> intent: "reminder" (Map events to reminders for stability)
-    - "تذكير" -> intent: "reminder"
-    - "الساعة" (At o'clock) / "بكرة" (Tomorrow) -> intent: "reminder" (Time implies reminder)
-    - Any unclear command -> intent: "clarification"
+    MANDATORY ARABIC MAPPINGS (Handle dialectal variations):
+    - "واتساب" / "واتس" / "رسالة واتساب" → intent: "whatsapp", action: "send"
+    - "أرسل" / "ابعث" / "وصل" → intent depends on context (email/whatsapp/task)
+    - "ذكرني" / "فكرني" / "نبهني" → intent: "reminder"
+    - "موعد" / "اجتماع" / "ميتنق" → intent: "reminder" (events → reminders)
+    - "تذكير" / "منبه" → intent: "reminder"
+    - "الساعة" / "بكرة" / "بعد ساعة" / "الظهر" → intent: "reminder" (time → reminder)
+    - "مهمة" / "تاسك" / "شغلة" / "حاجة" → intent: "task"
+    - "اشترِ" / "جيب" / "خذ" → intent: "task" (shopping tasks)
+    - "اتصل" / "كلم" / "تواصل مع" → intent: "task" (call tasks)
+    - "ابحث" / "دور على" → intent: "task"
+    - Any unclear command → intent: "clarification"
     
     CLEANING RULES:
-    - Remove polite phrases like "Please", "Can you", "لو سمحت", "بالله".
-    - Normalize ALIF (أ/إ/آ -> ا) and HA (ة -> ه).
+    - Remove polite phrases: "لو سمحت", "بالله", "من فضلك", "يا حبيبي"
+    - Normalize ALIF (أ/إ/آ → ا) and HA (ة → ه)
+    - Handle Moroccan/Gulf/Egyptian dialect variations
     
     Schema:
     {
@@ -84,11 +89,14 @@ async function parseIntentWithGemini(rawText: string): Promise<IntentResult> {
     }
     
     Examples:
-    "Remind me to drink water" -> { "intent": "reminder", "title": "Drink water", "confidence": 0.95, "language": "en" }
-    "Send WhatsApp to Ahmed meeting delayed" -> { "intent": "whatsapp", "to": "Ahmed", "message": "meeting delayed", "confidence": 0.9 }
-    "رسالة واتساب لمحمد تأخرت" -> { "intent": "whatsapp", "to": "محمد", "message": "تأخرت", "language": "ar" }
-    "ذكرني أشرب موية" -> { "intent": "reminder", "title": "أشرب موية", "confidence": 0.95, "language": "ar" }
-    "موعد دكتور" -> { "intent": "reminder", "title": "موعد دكتور", "datetime": "...", "confidence": 0.9, "language": "ar" }
+    "Remind me to drink water" → { "intent": "reminder", "title": "Drink water", "confidence": 0.95, "language": "en" }
+    "Send WhatsApp to Ahmed meeting delayed" → { "intent": "whatsapp", "to": "Ahmed", "message": "meeting delayed", "confidence": 0.9 }
+    "رسالة واتساب لمحمد تأخرت" → { "intent": "whatsapp", "to": "محمد", "message": "تأخرت", "language": "ar", "confidence": 0.9 }
+    "ذكرني أشرب موية" → { "intent": "reminder", "title": "أشرب موية", "confidence": 0.95, "language": "ar" }
+    "موعد دكتور بكرة الساعة 10" → { "intent": "reminder", "title": "موعد دكتور", "datetime": "...", "confidence": 0.9, "language": "ar" }
+    "اشتري حليب" → { "intent": "task", "action": "do", "title": "اشتري حليب", "confidence": 0.9, "language": "ar" }
+    "كلم أحمد بخصوص المشروع" → { "intent": "task", "title": "كلم أحمد بخصوص المشروع", "confidence": 0.85, "language": "ar" }
+    "فكرني أنام بدري" → { "intent": "reminder", "title": "أنام بدري", "confidence": 0.9, "language": "ar" }
     
     User Text: "${text}"
     `;

@@ -6,8 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
  * This keeps API keys secure and avoids CORS issues
  */
 
-// Server-only env (no NEXT_PUBLIC_)
-const HF_API_KEY = process.env.HF_API_KEY || process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY;
+// [V7 SECURITY] Server-only env (no NEXT_PUBLIC_)
+const HF_API_KEY = process.env.HF_API_KEY;
 const HF_STT_MODEL = process.env.HF_STT_MODEL || 'openai/whisper-small';
 const HF_ENDPOINT = 'https://api-inference.huggingface.co/models/';
 

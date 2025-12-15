@@ -114,7 +114,32 @@ export default function NotificationsPage() {
    const now = new Date();
    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-   const waitingApproval = plans.filter(p => p.status === 'waiting_approval');
+   // [V7 FIX] Zombie Filter for Inbox Logic (Strict Match to DecisionEngine)
+   const waitingApproval = plans.filter(p => {
+      if (p.status !== 'waiting_approval') return false;
+
+      const title = p.payload?.title || p.payload?.subject;
+
+      // Rule A: Empty Title
+      if (!title || title.trim().length === 0) return false;
+
+      // Rule B: Voice Garbage
+      if (p.source === 'voice' && p.payload?.confidence && p.payload.confidence < 0.6) return false;
+
+      // Rule C: Bad Intent
+      if (p.intent_type === 'unknown' || (p.intent_type as any) === 'clarification') return false;
+
+      // Rule D: Ignored
+      // @ts-ignore
+      if (p.ignored_at) return false;
+
+      // Rule E: Snoozed
+      // @ts-ignore
+      if (p.skip_until && new Date(p.skip_until) > now) return false;
+
+      return true;
+   });
+
    const scheduled = plans.filter(p => p.status === 'scheduled');
    // [V6] Only show executed plans from last 24h - prevents stale data
    const recentlyExecuted = plans.filter(p =>

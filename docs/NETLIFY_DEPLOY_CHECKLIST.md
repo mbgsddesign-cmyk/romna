@@ -1,14 +1,18 @@
-# ROMNA V6 Netlify Deploy Checklist
+# ROMNA V7 Netlify Deploy Checklist
 
 ## Pre-Deployment
 
 ### 1. Code Verification
 - [ ] `npm run build` succeeds locally (exit code 0)
-- [ ] `npm run verify:runtime` passes key checks
 - [ ] No TypeScript errors in console
 - [ ] `/debug` page shows correct config
 
-### 2. Environment Variables
+### 2. Security Verification (CRITICAL)
+- [ ] `NEXT_PUBLIC_GEMINI_API_KEY` is **NOT** set in Netlify
+- [ ] `NEXT_PUBLIC_HUGGINGFACE_API_KEY` is **NOT** set in Netlify
+- [ ] `src/lib/ai/config.ts` does NOT reference `NEXT_PUBLIC_` for AI keys
+
+### 3. Environment Variables
 Set in Netlify Site Settings → Environment Variables:
 
 **Required:**
@@ -18,12 +22,11 @@ Set in Netlify Site Settings → Environment Variables:
 - [ ] `GEMINI_API_KEY` (server-only)
 
 **Optional:**
-- [ ] `HF_STT_MODEL` (default: `openai/whisper-small`)
 - [ ] `CRON_SECRET`
 - [ ] `RESEND_API_KEY`
 - [ ] `TWILIO_*` variables (if WhatsApp enabled)
 
-### 3. netlify.toml
+### 4. netlify.toml
 Verify file contains:
 ```toml
 [build]
@@ -38,12 +41,12 @@ package = "@netlify/plugin-nextjs"
 
 ## Post-Deployment Verification
 
-### 4. Basic Checks
+### 5. Basic Checks
 - [ ] Home page loads without errors
 - [ ] `/debug` page shows API config
 - [ ] No console errors about "Failed to fetch"
 
-### 5. API Route Tests
+### 6. API Route Tests
 Test these endpoints return valid responses:
 
 | Endpoint | Method | Expected |
@@ -52,12 +55,17 @@ Test these endpoints return valid responses:
 | `/api/plans/skip` | POST (no auth) | 401 |
 | `/api/actions/approve` | POST (no auth) | 401 |
 
-### 6. Voice Flow
+### 7. Voice Flow
 - [ ] Tap mic → recording starts (console: `[VOICE] recorder started`)
 - [ ] Speak → processing happens (console: `[STT]` logs)
 - [ ] Result or fallback shown (no stuck "Thinking...")
 
-### 7. Localization
+### 8. DecisionEngine V2 Verification
+- [ ] Overdue task shows as Primary (even with Inbox items)
+- [ ] Zombie plans (empty title) are filtered from Inbox
+- [ ] Snoozed items do not appear
+
+### 9. Localization
 - [ ] Set `romna_locale=ar` cookie → page loads RTL
 - [ ] No layout jitter on refresh
 - [ ] Arabic text uses Cairo font
@@ -78,9 +86,33 @@ Test these endpoints return valid responses:
 3. Check Netlify build logs for SSR errors
 
 ### Ghost Cards
-1. Navigate to `/debug` → check Plans count
+1. Navigate to `/debug` → check Zombie count
 2. Snooze action should set `skip_until`
 3. Check DecisionEngine respects skip_until
+
+---
+
+## Monitoring Setup (Post-Deploy)
+
+### UptimeRobot Configuration
+
+1. Create account at [uptimerobot.com](https://uptimerobot.com)
+2. Add new HTTP(s) monitor:
+   - **URL**: `https://<YOUR_DOMAIN>/api/health`
+   - **Interval**: 60 seconds
+   - **Alert Contact**: Your email/Slack
+3. Alert conditions:
+   - Alert after **2 consecutive failures**
+   - Alert on recovery
+
+### Zombie Detector Setup
+
+1. Set `CRON_SECRET` in Netlify environment variables
+2. Configure scheduled trigger (every 30 min):
+   - **URL**: `https://<YOUR_DOMAIN>/api/monitor/zombies`
+   - **Method**: POST
+   - **Header**: `Authorization: Bearer <CRON_SECRET>`
+3. See `docs/MONITORING.md` for full setup instructions
 
 ---
 
@@ -93,5 +125,10 @@ Before marking deployment complete:
 - [ ] RTL stable (no jitter)
 - [ ] Settings page loads without crash
 - [ ] Console shows `[PULSE]`, `[STT]`, `[VOICE]` markers
+- [ ] **NO API keys exposed in browser bundle**
+- [ ] `/api/health` returns 200
+- [ ] `/api/health/data` returns 200
+- [ ] `/api/health/voice` returns 200
 
 ✅ **All checks pass = PRODUCTION READY**
+

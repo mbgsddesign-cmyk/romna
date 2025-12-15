@@ -44,6 +44,13 @@ next-env.d.ts
 .env.test.local
 .env.production.local
 .env*.local
+.env.production
 
-# netlify export folder (contains bundled secrets)
-/netlify/
+# netlify (contains state and bundled secrets)
+.netlify/
+.netlify/state.json
+
+# build outputs
+/dist/
+/out/
+

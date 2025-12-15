@@ -1,6 +1,7 @@
+// [V7 SECURITY] All AI keys are server-only. Never use NEXT_PUBLIC_ for API keys.
 export const HF_CONFIG = {
-    API_KEY: process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY || process.env.HUGGINGFACE_API_KEY,
-    GEMINI_KEY: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY,
+    API_KEY: process.env.HF_API_KEY,
+    GEMINI_KEY: process.env.GEMINI_API_KEY,
     MODELS: {
         STT: "openai/whisper-small",
         // Primary NLU (Gemini is preferred if key exists)

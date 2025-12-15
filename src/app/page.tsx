@@ -68,25 +68,23 @@ export default function HomePage() {
           tomorrow + 'T23:59:59'
         );
 
-        // Fetch Pending Plans (Inbox) - Server execution only for now
+        // Fetch Pending Plans (Inbox)
         const plansData = await StorageAdapter.getPendingPlans(currentUserId!, isLocal);
-        setInboxCount(plansData.length || 0);
 
-        setTodayTasks(tasksData.filter((t: any) => t.due_date?.startsWith(today)));
-        setTomorrowTasks(tasksData.filter((t: any) => t.due_date?.startsWith(tomorrow)));
-
-        // --- SILENT DECISION ENGINE ---
-        // Dynamically decide what is most important right now
+        // Create V2 Decision
         const decision = DecisionEngine.decide(tasksData, plansData);
 
-        if (decision.type !== 'empty') {
+        // [V7 FIX] Update Inbox Count from Engine (which filters zombies)
+        setInboxCount(decision.inbox.count);
+
+        if (decision.primary) {
           setActiveTask({
-            ...decision.originalItem,
-            title: decision.title,
-            ai_reason: decision.reason,
-            intent_type: decision.type === 'plan' ? decision.originalItem.intent_type : 'task',
-            ai_priority: decision.priority,
-            isPlan: decision.type === 'plan'
+            ...decision.primary.originalItem,
+            title: decision.primary.title,
+            ai_reason: decision.primary.reason,
+            intent_type: decision.primary.type === 'plan' ? decision.primary.originalItem.intent_type : 'task',
+            ai_priority: decision.primary.priority,
+            isPlan: decision.primary.type === 'plan'
           });
           transitionTo('active_decision');
         } else {

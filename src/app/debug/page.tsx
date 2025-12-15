@@ -33,25 +33,40 @@ export default function DebugPage() {
         setLastPulse(Date.now());
     }, [refreshTick]);
 
+    const [zombieCount, setZombieCount] = useState(0);
+
     // Fetch counts
     useEffect(() => {
         const fetchCounts = async () => {
             if (!userId || isLocal) return;
 
-            const { count: pCount } = await supabase
+            // Fetch RAW data
+            const { data: plans } = await supabase
                 .from('execution_plans')
-                .select('*', { count: 'exact', head: true })
+                .select('*')
                 .eq('user_id', userId)
                 .eq('status', 'waiting_approval');
 
-            const { count: tCount } = await supabase
+            const { data: tasks } = await supabase
                 .from('tasks')
-                .select('*', { count: 'exact', head: true })
+                .select('*')
                 .eq('user_id', userId)
                 .in('status', ['pending', 'active']);
 
-            setPlansCount(pCount || 0);
-            setTasksCount(tCount || 0);
+            if (plans && tasks) {
+                // Manual Zombie Logic Mirror to avoid import issues
+                const realPlans = plans.filter(p => {
+                    const title = p.payload?.title || p.payload?.subject;
+                    if (!title) return false;
+                    return true;
+                });
+
+                const zombies = plans.length - realPlans.length;
+
+                setPlansCount(realPlans.length);
+                setZombieCount(zombies);
+                setTasksCount(tasks.length || 0);
+            }
         };
         fetchCounts();
     }, [userId, isLocal, refreshTick]);
@@ -64,7 +79,7 @@ export default function DebugPage() {
 
     return (
         <div className="p-6 font-mono text-white bg-black min-h-screen space-y-6">
-            <h1 className="text-2xl font-bold">ROMNA V6 Debug</h1>
+            <h1 className="text-2xl font-bold">ROMNA V7 Debug</h1>
 
             {/* System Status */}
             <div className="bg-gray-900 p-4 rounded space-y-2">
@@ -87,8 +102,12 @@ export default function DebugPage() {
             <div className="bg-gray-900 p-4 rounded space-y-2">
                 <h2 className="text-lg font-bold text-volt mb-2">Data Status</h2>
                 <div className="flex justify-between">
-                    <span>Plans (waiting_approval)</span>
+                    <span>Plans (Valid Inbox)</span>
                     <span className="text-yellow-400">{plansCount}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span>Zombies (Hidden)</span>
+                    <span className="text-red-500 font-bold">{zombieCount}</span>
                 </div>
                 <div className="flex justify-between">
                     <span>Tasks (active)</span>
@@ -111,8 +130,7 @@ export default function DebugPage() {
                     {JSON.stringify({
                         STT_Model: HF_CONFIG.MODELS.STT,
                         NLU_Model: HF_CONFIG.MODELS.GEMINI_NLU,
-                        HF_KEY: mask(HF_CONFIG.API_KEY),
-                        GEMINI_KEY: mask(HF_CONFIG.GEMINI_KEY),
+                        // Masked keys
                     }, null, 2)}
                 </pre>
             </div>
@@ -122,11 +140,9 @@ export default function DebugPage() {
                 <h2 className="text-lg font-bold text-volt mb-2">Console Markers</h2>
                 <p>Open DevTools Console and look for:</p>
                 <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li><code className="text-green-400">[VOICE]</code> recorder started, fallback offline used</li>
+                    <li><code className="text-green-400">[VOICE]</code> detox logs (garbage rejected)</li>
                     <li><code className="text-blue-400">[PULSE]</code> timestamp on data refresh</li>
                     <li><code className="text-yellow-400">[DATA]</code> plans/tasks count</li>
-                    <li><code className="text-purple-400">[NLU]</code> intent parsing results</li>
-                    <li><code className="text-red-400">[STT]</code> transcription results</li>
                 </ul>
             </div>
 

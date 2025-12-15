@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { createHash } from 'crypto';
 import {
@@ -13,16 +13,41 @@ import {
 } from '@/lib/database.types';
 import { NotificationDispatcher } from '@/lib/notification-dispatcher';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy-loaded clients to avoid build-time env access
+let _supabase: SupabaseClient | null = null;
+let _openai: OpenAI | null = null;
 
 function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return _supabase;
 }
+
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return _openai;
+}
+
+// Use getter for supabase to maintain compatibility
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getSupabaseAdmin() as any)[prop];
+  }
+});
+
+const openai = new Proxy({} as OpenAI, {
+  get(_, prop) {
+    return (getOpenAI() as any)[prop];
+  }
+});
 
 const AUTOGLM_SYSTEM_PROMPT = `
 🧠 AUTOGLM SYSTEM PROMPT — ROMNA

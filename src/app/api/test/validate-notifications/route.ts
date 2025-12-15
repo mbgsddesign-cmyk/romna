@@ -2,13 +2,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { NotificationDispatcher } from '@/lib/notification-dispatcher';
-import { AutoGLM } from '@/lib/autoglm';
+
+// Force dynamic to prevent build-time env access
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   // Security check
   const secret = req.headers.get('x-admin-secret');
   if (secret !== process.env.SUPABASE_SERVICE_ROLE_KEY) {
-     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const supabase = createClient(
@@ -32,11 +34,11 @@ export async function POST(req: NextRequest) {
     // Use upsert to ensure user exists
     // Actually creating a user in auth is harder via script without admin API if not enabled?
     // We have service role key, so auth.admin is available.
-    
+
     let userId = '';
     const { data: { users } } = await supabase.auth.admin.listUsers();
     const existingUser = users.find(u => u.email === testEmail);
-    
+
     if (existingUser) {
       userId = existingUser.id;
     } else {
@@ -53,10 +55,10 @@ export async function POST(req: NextRequest) {
 
     // Ensure user_preferences exist
     await supabase.from('user_preferences').upsert({
-        user_id: userId,
-        plan_tier: 'pro',
-        ai_opt_in: true,
-        timezone: 'UTC'
+      user_id: userId,
+      plan_tier: 'pro',
+      ai_opt_in: true,
+      timezone: 'UTC'
     });
 
     // Cleanup
@@ -69,21 +71,21 @@ export async function POST(req: NextRequest) {
     // --- SCENARIO 1: AI Insight -> Notification -> Push (Success) ---
     // Test: Pro user, Opt-in, High Priority
     const s1_payload = {
-        title: 'S1 Test',
-        body: 'Success Scenario',
-        priority: 'high' as const,
-        category: 'ai'
+      title: 'S1 Test',
+      body: 'Success Scenario',
+      priority: 'high' as const,
+      category: 'ai'
     };
-    const s1_res = await dispatcher.dispatch(userId, s1_payload, { 
-        plan_tier: 'pro', ai_opt_in: true, timezone: 'UTC' 
+    const s1_res = await dispatcher.dispatch(userId, s1_payload, {
+      plan_tier: 'pro', ai_opt_in: true, timezone: 'UTC'
     });
-    
+
     // Verify DB
     const { data: s1_notifs } = await supabase.from('notifications').select('*').eq('user_id', userId).eq('title', 'S1 Test');
     if (s1_res.success && s1_notifs && s1_notifs.length === 1) {
-        log('1. AI Insight -> Notification -> Push', true, 'Dispatched and found in DB');
+      log('1. AI Insight -> Notification -> Push', true, 'Dispatched and found in DB');
     } else {
-        log('1. AI Insight -> Notification -> Push', false, `Result: ${s1_res.success}, DB count: ${s1_notifs?.length}`);
+      log('1. AI Insight -> Notification -> Push', false, `Result: ${s1_res.success}, DB count: ${s1_notifs?.length}`);
     }
 
     // --- SCENARIO 2: Duplicate Insight -> No Push ---
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
     // We will flag this risk if we confirm it doesn't dedup.
     // Let's try to run AutoGLM twice with same context input (but internally it adds timestamp).
     // If it fails to dedup (which we expect), we flag the risk.
-    
+
     // We can't easily test AutoGLM dedup without mocking Date or modifying code.
     // Instead, we will simulate the requirement check:
     // Does NotificationDispatcher dedup? No.
@@ -107,7 +109,7 @@ export async function POST(req: NextRequest) {
     // Setup: Free Tier
     // Reset notifications
     await supabase.from('notifications').delete().eq('user_id', userId);
-    
+
     const freePrefs = { plan_tier: 'free', ai_opt_in: true, timezone: 'UTC' };
     // 1st (Allowed)
     await dispatcher.dispatch(userId, { title: 'F1', body: 'b', priority: 'high', category: 'ai' }, freePrefs);
@@ -117,20 +119,20 @@ export async function POST(req: NextRequest) {
     const s3_res = await dispatcher.dispatch(userId, { title: 'F3', body: 'b', priority: 'high', category: 'ai' }, freePrefs);
 
     if (!s3_res.success && s3_res.skipped && s3_res.reason === 'daily_limit_reached') {
-        log('3. Free user over limit -> Blocked', true, 'Correctly blocked 3rd notification');
+      log('3. Free user over limit -> Blocked', true, 'Correctly blocked 3rd notification');
     } else {
-        log('3. Free user over limit -> Blocked', false, `Failed to block. Result: ${JSON.stringify(s3_res)}`);
+      log('3. Free user over limit -> Blocked', false, `Failed to block. Result: ${JSON.stringify(s3_res)}`);
     }
 
     // --- SCENARIO 4: ai_opt_in = false -> No Push ---
     const s4_res = await dispatcher.dispatch(userId, { title: 'OptOut', body: 'b', priority: 'high', category: 'ai' }, {
-        plan_tier: 'pro', ai_opt_in: false
+      plan_tier: 'pro', ai_opt_in: false
     });
-    
+
     if (!s4_res.success && s4_res.skipped && s4_res.reason === 'ai_opt_out') {
-        log('4. ai_opt_in = false -> No Push', true, 'Correctly skipped');
+      log('4. ai_opt_in = false -> No Push', true, 'Correctly skipped');
     } else {
-        log('4. ai_opt_in = false -> No Push', false, `Failed to skip. Result: ${JSON.stringify(s4_res)}`);
+      log('4. ai_opt_in = false -> No Push', false, `Failed to skip. Result: ${JSON.stringify(s4_res)}`);
     }
 
     // --- SCENARIO 5: Quiet hours -> Delayed Push ---
@@ -140,44 +142,44 @@ export async function POST(req: NextRequest) {
     // Start = 1 hour ago, End = 1 hour from now. 
     // Example: Now 14:00. Start 13:00, End 15:00.
     // If Now 23:30. Start 22:30. End 00:30. (Cross day boundary).
-    
+
     const pad = (n: number) => n.toString().padStart(2, '0');
-    
+
     const startD = new Date(now.getTime() - 60 * 60 * 1000); // -1h
     const endD = new Date(now.getTime() + 60 * 60 * 1000);   // +1h
-    
+
     const startStr = `${pad(startD.getUTCHours())}:${pad(startD.getUTCMinutes())}`;
     const endStr = `${pad(endD.getUTCHours())}:${pad(endD.getUTCMinutes())}`;
-    
+
     const quietPrefs = {
-        plan_tier: 'pro',
-        ai_opt_in: true,
-        timezone: 'UTC',
-        quiet_hours_enabled: true,
-        quiet_hours_start: startStr,
-        quiet_hours_end: endStr
+      plan_tier: 'pro',
+      ai_opt_in: true,
+      timezone: 'UTC',
+      quiet_hours_enabled: true,
+      quiet_hours_start: startStr,
+      quiet_hours_end: endStr
     };
 
-    const s5_res = await dispatcher.dispatch(userId, { 
-        title: 'Quiet', body: 'Shh', priority: 'normal', category: 'ai' 
+    const s5_res = await dispatcher.dispatch(userId, {
+      title: 'Quiet', body: 'Shh', priority: 'normal', category: 'ai'
     }, quietPrefs);
 
     if (s5_res.success && s5_res.reason === 'scheduled_for_later') {
-         // Verify scheduled_for > now
-         const { data: s5_notif } = await supabase.from('notifications').select('*').eq('user_id', userId).eq('title', 'Quiet').single();
-         if (s5_notif && new Date(s5_notif.scheduled_for!) > now) {
-             log('5. Quiet hours -> Delayed Push', true, `Scheduled for ${s5_notif.scheduled_for}`);
-         } else {
-             log('5. Quiet hours -> Delayed Push', false, 'Scheduled time invalid or not found');
-         }
+      // Verify scheduled_for > now
+      const { data: s5_notif } = await supabase.from('notifications').select('*').eq('user_id', userId).eq('title', 'Quiet').single();
+      if (s5_notif && new Date(s5_notif.scheduled_for!) > now) {
+        log('5. Quiet hours -> Delayed Push', true, `Scheduled for ${s5_notif.scheduled_for}`);
+      } else {
+        log('5. Quiet hours -> Delayed Push', false, 'Scheduled time invalid or not found');
+      }
     } else {
-         log('5. Quiet hours -> Delayed Push', false, `Failed to delay. Result: ${JSON.stringify(s5_res)}`);
+      log('5. Quiet hours -> Delayed Push', false, `Failed to delay. Result: ${JSON.stringify(s5_res)}`);
     }
 
     // Summary
     const passedCount = report.scenarios.filter((s: any) => s.passed).length;
     report.readiness = (passedCount >= 4 && report.risks.length === 0) ? 'READY' : 'RISKS_IDENTIFIED';
-    
+
     return NextResponse.json(report);
 
   } catch (error: any) {

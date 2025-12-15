@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { AutoGLM } from '@/lib/autoglm';
+
+// Force dynamic to prevent build-time env access
+export const dynamic = 'force-dynamic';
+
+// Lazy import to avoid build-time errors
+async function getAutoGLM() {
+  const { AutoGLM } = await import('@/lib/autoglm');
+  return AutoGLM;
+}
 
 function getSupabaseAdmin() {
   return createClient(
@@ -33,6 +41,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'No users found' });
     }
 
+    const AutoGLM = await getAutoGLM();
     const results = await Promise.allSettled(
       users.map(user => AutoGLM.run(user.id, 'daily_scan'))
     );

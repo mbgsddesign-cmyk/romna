@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { AutoGLM } from '@/lib/autoglm';
+
+// Force dynamic to prevent build-time env access
+export const dynamic = 'force-dynamic';
+
+// Lazy import to avoid build-time errors
+async function getAutoGLM() {
+  const { AutoGLM } = await import('@/lib/autoglm');
+  return AutoGLM;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,7 +69,7 @@ Analyze the transcript and return a JSON object with:
     });
 
     if (!response.ok) {
-        throw new Error('OpenAI interpretation failed');
+      throw new Error('OpenAI interpretation failed');
     }
 
     const data = await response.json();
@@ -91,8 +99,9 @@ Analyze the transcript and return a JSON object with:
     // 4. Trigger AutoGLM if high confidence
     let autoGlmResult = null;
     if (confidence >= 0.6) {
+      const AutoGLM = await getAutoGLM();
       autoGlmResult = await AutoGLM.run(user.id, 'voice_intent', { voice_note_id: voiceNote.id });
-      
+
       // Update voice note as processed
       await supabase
         .from('voice_notes')
